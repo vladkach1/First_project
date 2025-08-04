@@ -1,0 +1,26 @@
+# Файлы окружения
+.env
+*.env
+
+# Временные файлы
+temp_files/
+storage/
+__pycache__/
+
+# Данные
+*.db
+*.sqlite
+*.xlsx
+
+# Логи
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Системные файлы
+.DS_Store
+Thumbs.db

@@ -1,0 +1,23 @@
+# Селекторы для парсинга цен на сайтах
+sites:
+  ETM:
+    url: "https://www.etm.ru/search?q={query}"
+    price_selector: ".product-card-price__current"
+  Тинко:
+    url: "https://www.tehnokomplekt.ru/search/?q={query}"
+    price_selector: ".price"
+  Luis:
+    url: "https://luis.ru/search?q={query}"
+    price_selector: ".product-item-price"
+  Layta:
+    url: "https://www.lait.ru/search/?q={query}"
+    price_selector: ".product-card-price__value"
+  Eltex:
+    url: "https://eltexcom.ru/search/?q={query}"
+    price_selector: ".catalog-item-price"
+  LTV:
+    url: "https://ltvs.ru/search/?q={query}"
+    price_selector: ".price_value"
+  RVi:
+    url: "https://rvi.ru/search/?q={query}"
+    price_selector: ".price"
