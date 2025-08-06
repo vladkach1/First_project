@@ -1,11 +1,10 @@
 import os
 import logging
 import pytesseract
+from pathlib import Path  # Важно добавить
 from pdf2image import convert_from_path
 from config import OCR_ENABLED, OCR_LANGUAGES, logger
-from pathlib import Path
-
-def extract_text_with_ocr(pdf_path: Path) -> str:
+def extract_text_with_ocr(pdf_path: Path, page_num: int = None) -> str:
     """Извлечение текста из PDF с помощью OCR"""
     if not OCR_ENABLED:
         logger.warning("OCR запрошен, но отключен в конфигурации")

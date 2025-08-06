@@ -8,6 +8,7 @@ from scraping.proxy_manager import test_proxies
 
 async def main():
     """Основная функция запуска бота"""
+    application = None
     try:
         logger.info("Запуск бота...")
         
@@ -23,11 +24,28 @@ async def main():
         
         # Запуск бота
         logger.info("Бот запущен и готов к работе")
-        await application.run_polling()
+        await application.initialize()  # Явная инициализация
+        await application.start()
+        await application.updater.start_polling()  # Для версий 20.x+
         
+        # Бесконечный цикл работы бота
+        while True:
+            await asyncio.sleep(3600)  # Просто ждем
+            
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Получен сигнал на остановку")
     except Exception as e:
-        logger.critical(f"Критическая ошибка запуска: {e}")
-        raise
+        logger.critical(f"Критическая ошибка: {e}")
+    finally:
+        if application:
+            if application.updater:
+                await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
+        logger.info("Бот завершил работу")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем")
