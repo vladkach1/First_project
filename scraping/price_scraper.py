@@ -2,6 +2,7 @@ import time
 import random
 import requests
 import yaml
+import re
 from bs4 import BeautifulSoup
 from pathlib import Path
 from config import REQUEST_TIMEOUT, REQUEST_RETRIES, REQUEST_DELAY, logger
