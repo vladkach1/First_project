@@ -5,7 +5,26 @@ from typing import List, Dict
 from config import logger
 from bot.utils import setup_cache, cache_get, cache_set
 from scraping.price_scraper import find_equipment_price
+from .cid_decoder import decode_cid_text
+import time
+from config import MAX_PARSE_TIME
 
+def analyze_equipment(equipment: List[Dict]) -> List[Dict]:
+    start_time = time.time()
+    for item in equipment:
+        # Проверка времени
+        if time.time() - start_time > MAX_PARSE_TIME:
+            logger.warning("Превышено время анализа. Часть оборудования не обработана.")
+            break
+def normalize_name(name: str) -> str:
+    """Нормализация названия оборудования"""
+    # Декодирование CID в первую очередь
+    name = decode_cid_text(name)
+    
+    # Удаление лишних пробелов
+    name = re.sub(r"\s+", " ", name).strip()
+    
+    # Остальная нормализация...
 def analyze_equipment(equipment: List[Dict]) -> List[Dict]:
     """Анализ оборудования и поиск цен"""
     logger.info(f"Начат анализ {len(equipment)} позиций")

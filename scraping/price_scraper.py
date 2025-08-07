@@ -7,7 +7,14 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 from config import REQUEST_TIMEOUT, REQUEST_RETRIES, REQUEST_DELAY, logger
 from .proxy_manager import get_proxy
+from processing.cid_decoder import decode_cid_text
 
+def find_equipment_price(equipment_name: str) -> dict:
+    """Поиск цены на оборудование"""
+    # Декодируем имя оборудования перед поиском
+    equipment_name = decode_cid_text(equipment_name)
+    
+    # Остальной код без изменений...
 # Загрузка селекторов
 SELECTORS_FILE = Path(__file__).parent / "site_selectors.yaml"
 with open(SELECTORS_FILE, 'r', encoding='utf-8') as f:

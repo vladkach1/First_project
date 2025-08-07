@@ -1,14 +1,117 @@
 import re
-import pdfplumber
 import logging
+import pdfplumber
 import camelot
 from pathlib import Path
 from typing import List, Dict
 from config import logger
 from .ocr_processor import extract_text_with_ocr
 
+def process_table(table: list, page_num: int) -> List[Dict]:
+    """Обработка таблицы с оборудованием"""
+    equipment = []
+    headers = [str(cell).strip().lower() if cell else "" for cell in table[0]]
+    
+    # Определение индексов колонок (исправленная версия)
+    name_col = 0
+    qty_col = None
+    unit_col = None
+    
+    for i, h in enumerate(headers):
+        if "наименование" in h:
+            name_col = i
+        if "количество" in h:
+            qty_col = i
+        if "ед. изм" in h:
+            unit_col = i
+    
+    for row in table[1:]:
+        if not any(row): 
+            continue
+        
+        quantity = 1
+        if qty_col is not None and row[qty_col] and str(row[qty_col]).strip():
+            try:
+                qty_str = str(row[qty_col]).replace(",", ".")
+                quantity = int(float(qty_str))
+            except (ValueError, TypeError):
+                quantity = 1
+        
+        item = {
+            "name": str(row[name_col]).strip() if name_col is not None and row[name_col] else "Неизвестное оборудование",
+            "quantity": quantity,
+            "unit": str(row[unit_col]).lower().strip() if unit_col is not None and row[unit_col] else "шт.",
+            "source_page": page_num
+        }
+        equipment.append(item)
+    
+    return equipment
+
+def find_equipment_in_text(text: str, page_num: int) -> List[Dict]:
+    """Поиск оборудования в тексте"""
+    equipment = []
+    
+    # Паттерны для поиска оборудования
+    patterns = [
+        r"(?P<name>[А-ЯA-Z].+?)\s+(?P<quantity>\d+)\s*(?P<unit>шт|м|кг|компл|л|см)\b",
+        r"(?P<name>[А-ЯA-Z][^0-9\n]+?)\s+-\s+(?P<quantity>\d+)",
+        r"^(?P<name>[А-ЯA-Z].+?)\s+(?P<quantity>\d+)$"
+    ]
+    
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.MULTILINE):
+            equipment.append({
+                "name": match.group("name").strip(),
+                "quantity": int(match.group("quantity")),
+                "unit": match.groupdict().get("unit", "шт."),
+                "source_page": page_num
+            })
+    
+    return equipment
+
+def process_camelot_table(table) -> List[Dict]:
+    """Обработка таблиц из camelot"""
+    equipment = []
+    df = table.df
+    headers = [str(cell).strip().lower() for cell in df.iloc[0]]
+    
+    # Определение индексов колонок (исправленная версия)
+    name_col = 0
+    qty_col = None
+    unit_col = None
+    
+    for i, h in enumerate(headers):
+        if "наименование" in h:
+            name_col = i
+        if "количество" in h:
+            qty_col = i
+        if "ед. изм" in h:
+            unit_col = i
+    
+    for _, row in df.iloc[1:].iterrows():
+        if not any(row.values): 
+            continue
+        
+        quantity = 1
+        if qty_col is not None and row[qty_col] and str(row[qty_col]).strip():
+            try:
+                qty_str = str(row[qty_col]).replace(",", ".")
+                quantity = int(float(qty_str))
+            except (ValueError, TypeError):
+                quantity = 1
+        
+        item = {
+            "name": str(row[name_col]).strip() if name_col is not None and row[name_col] else "Неизвестное оборудование",
+            "quantity": quantity,
+            "unit": str(row[unit_col]).lower().strip() if unit_col is not None and row[unit_col] else "шт.",
+            "source_page": table.page
+        }
+        equipment.append(item)
+    
+    return equipment
+
 def process_pdf(pdf_path: Path, output_path: Path, user_id: int):
-    """Основной процесс обработки PDF с использованием camelot"""
+    """Основной процесс обработки PDF"""
     logger.info(f"Начата обработка PDF: {pdf_path}")
     equipment = []
     
@@ -24,20 +127,18 @@ def process_pdf(pdf_path: Path, output_path: Path, user_id: int):
             )
             
             for table in tables:
-                if table.parsing_report["accuracy"] > 70:  # Фильтр по точности
+                if table.parsing_report["accuracy"] > 70:
                     equipment.extend(process_camelot_table(table))
         except Exception as e:
             logger.warning(f"Ошибка camelot: {e}")
-        
-        # Этап 2: Обработка с помощью pdfplumber (для текста и таблиц без границ)
+
+        # Этап 2: Обработка с помощью pdfplumber
         with pdfplumber.open(pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages, 1):
                 try:
                     text = page.extract_text() or ""
                     
-                    # Если текст не извлекается, используем OCR
                     if not text.strip() or len(text.strip()) < 50:
-                        logger.warning(f"Страница {page_num} содержит мало текста, используется OCR")
                         text = extract_text_with_ocr(pdf_path, page_num)
                     
                     # Обработка таблиц pdfplumber
@@ -49,83 +150,21 @@ def process_pdf(pdf_path: Path, output_path: Path, user_id: int):
                     for table in tables:
                         equipment.extend(process_table(table, page_num))
                     
-                    # Поиск оборудования в тексте
+                    # Поиск в тексте
                     equipment.extend(find_equipment_in_text(text, page_num))
                     
                 except Exception as e:
                     logger.error(f"Ошибка на странице {page_num}: {e}")
-        
-        # Этап 3: Резервные методы (если ничего не найдено)
-        if not equipment:
-            logger.warning("Оборудование не найдено, используется расширенный поиск")
-            equipment = extended_equipment_search(pdf_path)
         
         if not equipment:
             raise ValueError("Не найдено оборудования в документе")
         
         # Анализ и генерация отчета
         from .equipment_analyzer import analyze_equipment
-        equipment = analyze_equipment(equipment)
-        
         from .excel_generator import generate_excel_report
-        generate_excel_report(equipment, output_path)
+        generate_excel_report(analyze_equipment(equipment), output_path)
         logger.info(f"Отчет сгенерирован: {output_path}")
     
     except Exception as e:
         logger.exception("Ошибка обработки PDF")
         raise
-
-def process_camelot_table(table) -> List[Dict]:
-    """Обработка таблиц из camelot"""
-    equipment = []
-    df = table.df
-    headers = [str(cell).strip().lower() for cell in df.iloc[0]]
-    
-    # Определение колонок
-    name_col = next((i for i, h in enumerate(headers) if "наименование" in h), 0)
-    qty_col = next((i for i, h in enumerate(headers) if "количество" in h), None)
-    unit_col = next((i for i, h in enumerate(headers) if "ед. изм" in h), None)
-    
-    for _, row in df.iloc[1:].iterrows():
-        if not any(row.values): continue
-        
-        item = {
-            "name": str(row[name_col]),
-            "quantity": try_parse_quantity(row[qty_col] if qty_col else "1"),
-            "unit": str(row[unit_col]).lower() if unit_col else "шт.",
-            "source_page": table.page
-        }
-        equipment.append(item)
-    
-    return equipment
-
-def try_parse_quantity(value: str) -> int:
-    """Попытка преобразования количества"""
-    try:
-        return int(float(str(value).replace(",", ".")))
-    except:
-        return 1
-
-def extended_equipment_search(pdf_path: Path) -> List[Dict]:
-    """Расширенный поиск оборудования через OCR"""
-    from .ocr_processor import extract_text_with_ocr
-    full_text = extract_text_with_ocr(pdf_path)
-    equipment = []
-    
-    # Поиск специфичных паттернов оборудования
-    patterns = [
-        r"(ВЗ–РиБСК-\d+|РН-\d+[А-Я]?|ИП \d+-\d+)",
-        r"([А-Я]{2,}-\d+[А-Я]?)",
-        r"(Кабель [\w\d-]+ \d+x\d+\.\d+)"
-    ]
-    
-    for pattern in patterns:
-        for match in re.finditer(pattern, full_text):
-            equipment.append({
-                "name": match.group(),
-                "quantity": 1,
-                "unit": "шт.",
-                "source_page": "OCR"
-            })
-    
-    return equipment

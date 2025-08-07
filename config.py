@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Загрузка переменных окружения
 load_dotenv()
-
+MAX_PARSE_TIME = int(os.getenv("MAX_PARSE_TIME", 300))  # 5 минут
 # Базовые пути
 BASE_DIR = Path(__file__).parent.resolve()
 STORAGE_DIR = BASE_DIR / "storage"
