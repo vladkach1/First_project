@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import List, Dict
 from config import logger
 from .ocr_processor import extract_text_with_ocr
-
+from .cid_decoder import decode_cid_text
 def process_table(table: list, page_num: int) -> List[Dict]:
-    """Обработка таблицы с оборудованием"""
     equipment = []
-    headers = [str(cell).strip().lower() if cell else "" for cell in table[0]]
+    headers = [decode_cid_text(str(cell).strip()).lower() if cell else "" for cell in table[0]]
     
     # Определение индексов колонок (исправленная версия)
     name_col = 0
@@ -38,7 +37,7 @@ def process_table(table: list, page_num: int) -> List[Dict]:
                 quantity = 1
         
         item = {
-            "name": str(row[name_col]).strip() if name_col is not None and row[name_col] else "Неизвестное оборудование",
+            "name": decode_cid_text(str(row[name_col]).strip()) if name_col is not None and row[name_col] else "Неизвестное оборудование",
             "quantity": quantity,
             "unit": str(row[unit_col]).lower().strip() if unit_col is not None and row[unit_col] else "шт.",
             "source_page": page_num
