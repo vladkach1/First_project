@@ -1,23 +1,23 @@
 # Селекторы для парсинга цен на сайтах
 sites:
   ETM:
-    url: "https://www.etm.ru/search?q={query}"
-    price_selector: ".product-card-price__current"
+    url: "https://www.etm.ru/catalog?searchValue={query}"
+    price_selector: "p.MuiTypography-root[data-testid="catalog-list-item-price-details-0"]"
   Тинко:
-    url: "https://www.tehnokomplekt.ru/search/?q={query}"
-    price_selector: ".price"
+    url: "https://www.tinko.ru/search/?q={query}"
+    price_selector: 'span[itemprop="price"]'
   Luis:
-    url: "https://luis.ru/search?q={query}"
-    price_selector: ".product-item-price"
+    url: "https://luis.ru/catalog/search?searchString={query}"
+    price_selector: ".QG9RHe > span:not([class])"
   Layta:
-    url: "https://www.lait.ru/search/?q={query}"
-    price_selector: ".product-card-price__value"
-  Eltex:
-    url: "https://eltexcom.ru/search/?q={query}"
-    price_selector: ".catalog-item-price"
-  LTV:
-    url: "https://ltvs.ru/search/?q={query}"
-    price_selector: ".price_value"
-  RVi:
-    url: "https://rvi.ru/search/?q={query}"
-    price_selector: ".price"
+    url: "https://www.layta.ru/?digiSearch=true&term={query}"
+    price_selector: "span[class="digi-product-price-variant digi-product-price-variant_actual"]
+  #Eltex:
+  #  url: "https://eltexcom.ru/search/?q={query}"
+  #  price_selector: ".catalog-item-price"
+  #LTV:
+  #  url: "https://ltv-cctv.ru/search/index.php?q={query}&s=Поиск"
+  #  price_selector: ".price_value"
+  #RVi:
+  #  url: "https://rvi.ru/search/?q={query}"
+  #  price_selector: ".price"
