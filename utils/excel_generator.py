@@ -203,7 +203,11 @@ def create_commercial_offer(equipment_data, scraped_data):
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
 
         # Добавляем итоговую строку
-        ws.append([''] * 6 + [f"ИТОГО: {total_sum:.2f} {DEFAULT_CURRENCY}"])
+        ws.append(['']+["ИТОГО"]+['']*4+[f"{total_sum:.2f}"])
+        ws.append(['']+["Расходные материалы"]+['']*4+[f"{total_sum:.2f}"])
+        ws.append(['']+["Итого оборудование и расходные материалы"]+['']*4+[f"{total_sum:.2f}"])
+        ws.append(['']+["Монтажные работы"]+['']*4+[f"{total_sum:.2f}"])
+        ws.append(['']+["ВСЕГО С НДС 20%:"]+['']*4+[f"{total_sum:.2f}"])
         # Применяем стили
         apply_style(ws)
 
