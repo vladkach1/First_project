@@ -44,43 +44,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await update.message.reply_text(welcome_message)
 
-async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик PDF файлов"""
     try:
         # Проверка типа файла
-        if not update.message.document.mime_type == 'application/pdf':
-            await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF.")
-            return
+        #if not update.message.document.mime_type == 'application/pdf':
+        #    await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF.")
+        #    return
             
         # Проверка размера файла
-        if update.message.document.file_size > MAX_FILE_SIZE:
-            await update.message.reply_text(f"❌ Размер файла превышает {MAX_FILE_SIZE // 1024 // 1024}MB. Пожалуйста, отправьте файл меньшего размера.")
-            return
+        #if update.message.document.file_size > MAX_FILE_SIZE:
+        #    await update.message.reply_text(f"❌ Размер файла превышает {MAX_FILE_SIZE // 1024 // 1024}MB. Пожалуйста, отправьте файл меньшего размера.")
+        #    return
             
         # Создаем временную директорию
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Скачиваем файл
-            pdf_file = await context.bot.get_file(update.message.document.file_id)
-            pdf_path = os.path.join(tmp_dir, 'document.pdf')
-            await pdf_file.download_to_drive(pdf_path)
+            #pdf_file = await context.bot.get_file(update.message.document.file_id)
+            #pdf_path = os.path.join(tmp_dir, 'document.pdf')
+            #await pdf_file.download_to_drive(pdf_path)
             
             # Уведомление пользователя
-            await update.message.reply_text("📥 Файл получен. Начинаю обработку...")
+            #await update.message.reply_text("📥 Файл получен. Начинаю обработку...")
             
             # Этап 1: Конвертация PDF в изображения
-            await update.message.reply_text("🔄 Конвертирую PDF в изображения...")
-            img_paths = convert_pdf_to_images(pdf_path, tmp_dir)
+            #await update.message.reply_text("🔄 Конвертирую PDF в изображения...")
+            #img_paths = convert_pdf_to_images(pdf_path, tmp_dir)
             
-            if not img_paths:
-                await update.message.reply_text("❌ Не удалось конвертировать PDF. Пожалуйста, убедитесь, что файл не поврежден.")
-                return
+            #if not img_paths:
+            #    await update.message.reply_text("❌ Не удалось конвертировать PDF. Пожалуйста, убедитесь, что файл не поврежден.")
+            #    return
             
             # Этап 2: OCR обработка
-            await update.message.reply_text("🔍 Распознаю текст с изображений...")
-            full_text = ""
-            for img_path in img_paths:
-                text = extract_text_from_image(img_path)
-                full_text += text + "\n\n"
+            #await update.message.reply_text("🔍 Распознаю текст с изображений...")
+            #full_text = ""
+            #for img_path in img_paths:
+            #    text = extract_text_from_image(img_path)
+            #    full_text += text + "\n\n"
             # Этап 3: Анализ текста
             #await update.message.reply_text("📊 Анализирую спецификацию оборудования...")
             #equipment_data = parse_equipment_spec(full_text)
@@ -88,26 +88,35 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             #if not equipment_data:
             #    await update.message.reply_text("❌ Не удалось найти данные оборудования в документе. Убедитесь, что в PDF есть таблица со спецификацией.")
             #    return
-            equipment_data = []
-            item = {
-                    'name': "Кабель",
-                    'quantity': 1
-                }
-            equipment_data.append(item)
-            item = {
-                    'name': "Датчик",
-                    'quantity': 1
-                }
-            equipment_data.append(item)
 
-            # Этап 4: Поиск оборудования на сайтах
+            # НАЧАЛО НОВОГО ЭТАПА В НАШЕЙ ЖИЗНИ
+            
+            user_text = update.message.text
+            
+            lines = user_text.split('\n')
+
+            data=[]
+
+            for i in lines:
+                data.append(i.split())
+
+
+            equipment_data = []
+            for i in data:
+                item = {
+                        'name': i[0],
+                        'quantity': i[1]
+                    }
+                equipment_data.append(item)
+
+            # Этап 1: Поиск оборудования на сайтах (web_scraping)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
             scraped_data = []
             for item in equipment_data:
                 results = search_equipment_on_sites(item['name'])
                 scraped_data.append(results)
             
-            # Этап 5: Генерация отчетов
+            # Этап 2: Генерация отчетов (excel_generator)
             await update.message.reply_text("📊 Формирую отчеты...")
             
             # Отчет 1: Результаты поиска
@@ -129,12 +138,13 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             
             # Отчет 2: Коммерческое предложение
             await update.message.reply_text("💼 Формирую коммерческое предложение...")
-            commercial_offer = create_commercial_offer(equipment_data, scraped_data)
-            offer_path = os.path.join(tmp_dir, 'commercial_offer.xlsx')
-            commercial_offer.save(offer_path)
+            commercial_report = create_commercial_offer(equipment_data, scraped_data)
+            commercial_buffer = io.BytesIO()
+            commercial_report.save(commercial_buffer)  # Сохраняем в буфер
+            commercial_buffer.seek(0)  # Перемещаем указатель в начало
             
             await update.message.reply_document(
-                document=InputFile(offer_path, filename='commercial_offer.xlsx'),
+                document=InputFile(report_buffer, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
             
@@ -156,7 +166,7 @@ def main():
         
         # Регистрируем обработчики
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
+        application.add_handler(MessageHandler(filters.Text(), handle_text))
         application.add_error_handler(handle_error)
         
         # Запускаем бота

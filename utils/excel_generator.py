@@ -71,14 +71,14 @@ def create_search_report(equipment_data, scraped_data):
         report_data = []
         
         for i, item in enumerate(equipment_data):
-            print(1)
+            
             item_name = item['name']
-            print(2)
+            
             quantity = item['quantity']
-            print(3)
+            
             # Фильтруем результаты для текущего оборудования
             item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.0001]
-            print(4)
+            
             if not item_results:
                 report_data.append({
                     '№': i+1,
@@ -89,15 +89,12 @@ def create_search_report(equipment_data, scraped_data):
                     'Статус': 'out_of_stock'
                 })
                 continue
-            print(type(item_results))
-            print(type(item_results[0][0]))
-            print(item_results[0])
+            
             # Сортируем по цене (дешевле сначала)
             # item_results.sort(key=lambda x: x['price'])
-            print(6)
+            
             # Выбираем лучший вариант
             best_offer = item_results[i][0]
-            print(7)
             report_data.append({
                 '№': i+1,
                 'Наименование': item_name,
@@ -106,7 +103,6 @@ def create_search_report(equipment_data, scraped_data):
                 'Сайт': best_offer['site'],
                 'Статус': best_offer['status']
             })
-        print(8)
         df = pd.DataFrame(report_data)
         
         # Создаем Excel книгу
@@ -169,7 +165,7 @@ def create_commercial_offer(equipment_data, scraped_data):
             
             # Ищем лучшую цену
             best_price = None
-            item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.7]
+            item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.0001]
             
             if item_results:
                 best_offer = min(item_results, key=lambda x: x['price'])
