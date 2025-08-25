@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 from config import COLOR_MAPPING, DEFAULT_CURRENCY
 from utils.text_analysis import similarity
+from openpyxl.drawing.image import Image
 
 # Настройка логирования
 logger = logging.getLogger("ExcelGenerator")
@@ -109,12 +110,16 @@ def create_search_report(equipment_data, scraped_data):
         ws = wb.active
         ws.title = "Результаты поиска"
 
-        #Заголовки
+        # Пропускаем 11 строк
+        START_ROW = 12
+        
+        # Заголовки (строка 12)
         headers = list(df.columns)
-        ws.append(headers)
-
-        #Заполняем даными
-        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
+        for col_idx, header in enumerate(headers, 1):
+            ws.cell(row=START_ROW, column=col_idx, value=header)
+        
+        # Заполняем данными начиная с строки 13
+        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), START_ROW + 1):
             for c_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
                 # Раскрашиваем статус
@@ -122,7 +127,7 @@ def create_search_report(equipment_data, scraped_data):
                     status = value
                     color = COLOR_MAPPING.get(status, 'FFFFFF')
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-
+        
         # Применяем стили
         apply_style(ws)
 
@@ -188,12 +193,19 @@ def create_commercial_offer(equipment_data, scraped_data):
         ws = wb.active
         ws.title = "Результаты поиска"
 
+        img = Image('/Users/vladislavpaschenko/Documents/GitHub/First_project/asets/Head.jpg')
+        ws.add_image(img, 'A1')  # добавляем в ячейку D1
+
+        # Пропускаем 11 строк
+        START_ROW = 12
+
         #Заголовки
         headers = list(df.columns)
-        ws.append(headers)
+        for col_idx, header in enumerate(headers, 1):
+            ws.cell(row=START_ROW, column=col_idx, value=header)
 
         #Заполняем даными
-        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
+        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), START_ROW + 1):
             for c_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
                 # Раскрашиваем статус
