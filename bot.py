@@ -98,7 +98,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             data=[]
 
             for i in lines:
-                data.append(i.split())
+                data.append(i.rsplit(' ',2))
 
 
             equipment_data = []
