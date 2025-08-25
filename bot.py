@@ -2,6 +2,7 @@ import os
 import tempfile
 import logging
 import asyncio
+import io
 from telegram import Update, InputFile
 from telegram.ext import (
     Application,
@@ -80,15 +81,25 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             for img_path in img_paths:
                 text = extract_text_from_image(img_path)
                 full_text += text + "\n\n"
-            
             # Этап 3: Анализ текста
-            await update.message.reply_text("📊 Анализирую спецификацию оборудования...")
-            equipment_data = parse_equipment_spec(full_text)
+            #await update.message.reply_text("📊 Анализирую спецификацию оборудования...")
+            #equipment_data = parse_equipment_spec(full_text)
             
-            if not equipment_data:
-                await update.message.reply_text("❌ Не удалось найти данные оборудования в документе. Убедитесь, что в PDF есть таблица со спецификацией.")
-                return
-                
+            #if not equipment_data:
+            #    await update.message.reply_text("❌ Не удалось найти данные оборудования в документе. Убедитесь, что в PDF есть таблица со спецификацией.")
+            #    return
+            equipment_data = []
+            item = {
+                    'name': "Кабель",
+                    'quantity': 1
+                }
+            equipment_data.append(item)
+            item = {
+                    'name': "Датчик",
+                    'quantity': 1
+                }
+            equipment_data.append(item)
+
             # Этап 4: Поиск оборудования на сайтах
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
             scraped_data = []
@@ -101,18 +112,19 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             
             # Отчет 1: Результаты поиска
             search_report = create_search_report(equipment_data, scraped_data)
-            report_path = os.path.join(tmp_dir, 'search_report.xlsx')
-            search_report.save(report_path)
-            
+            report_buffer = io.BytesIO()
+            search_report.save(report_buffer)  # Сохраняем в буфер
+            report_buffer.seek(0)  # Перемещаем указатель в начало
+        
             await update.message.reply_document(
-                document=InputFile(report_path),
+                document=InputFile(report_buffer, filename='search_report.xlsx'),
                 caption="✅ Результаты поиска оборудования\n\n"
-                        "Цветовая маркировка статусов:\n"
-                        "🟢 Зеленый - полностью доступно\n"
-                        "🔵 Синий - требуется запрос\n"
-                        "🟠 Оранжевый - мало остаток\n"
-                        "🔴 Красный - недоступно\n"
-                        "🟡 Желтый - санкционное оборудование"
+                    "Цветовая маркировка статусов:\n"
+                    "🟢 Зеленый - полностью доступно\n"
+                    "🔵 Синий - требуется запрос\n"
+                    "🟠 Оранжевый - мало остаток\n"
+                    "🔴 Красный - недоступно\n"
+                    "🟡 Желтый - санкционное оборудование"
             )
             
             # Отчет 2: Коммерческое предложение
@@ -122,7 +134,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             commercial_offer.save(offer_path)
             
             await update.message.reply_document(
-                document=InputFile(offer_path),
+                document=InputFile(offer_path, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
             

@@ -43,17 +43,17 @@ def scrape_tinko(item_name):
         
         # Ожидание загрузки результатов
         WebDriverWait(driver, REQUEST_TIMEOUT).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".catalog-item"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".catalog-product"))
         )
         
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        items = soup.select('.catalog-item')
+        items = soup.select('.catalog-product')
         
         results = []
         for item in items[:3]:  # Первые 3 результата
-            name_elem = item.select_one('.item-title')
-            price_elem = item.select_one('.price')
-            stock_elem = item.select_one('.stock-status')
+            name_elem = item.select_one('.catalog-product__title[itemprop="name"] a')
+            price_elem = item.select_one('[itemprop="price"]')
+            stock_elem = item.select_one('.vue-stock')
             
             if not name_elem or not price_elem:
                 continue
@@ -66,7 +66,7 @@ def scrape_tinko(item_name):
             status = 'available'
             if "под заказ" in stock.lower():
                 status = 'on_request'
-            elif "нет в наличии" in stock.lower():
+            elif bool(re.match(r'^до \d+ дней', stock.lower())):
                 status = 'out_of_stock'
             
             results.append({

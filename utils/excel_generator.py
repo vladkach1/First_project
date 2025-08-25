@@ -1,3 +1,4 @@
+import re
 import os
 import logging
 import pandas as pd
@@ -6,6 +7,7 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 from config import COLOR_MAPPING, DEFAULT_CURRENCY
+from utils.text_analysis import similarity
 
 # Настройка логирования
 logger = logging.getLogger("ExcelGenerator")
@@ -69,12 +71,14 @@ def create_search_report(equipment_data, scraped_data):
         report_data = []
         
         for i, item in enumerate(equipment_data):
+            print(1)
             item_name = item['name']
+            print(2)
             quantity = item['quantity']
-            
+            print(3)
             # Фильтруем результаты для текущего оборудования
-            item_results = [r for r in scraped_data if similarity(r['name'], item_name) > 0.7]
-            
+            item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.0001]
+            print(4)
             if not item_results:
                 report_data.append({
                     '№': i+1,
@@ -85,13 +89,15 @@ def create_search_report(equipment_data, scraped_data):
                     'Статус': 'out_of_stock'
                 })
                 continue
-            
+            print(type(item_results))
+            print(type(item_results[0][0]))
+            print(item_results[0])
             # Сортируем по цене (дешевле сначала)
-            item_results.sort(key=lambda x: x['price'])
-            
+            # item_results.sort(key=lambda x: x['price'])
+            print(6)
             # Выбираем лучший вариант
-            best_offer = item_results[0]
-            
+            best_offer = item_results[i][0]
+            print(7)
             report_data.append({
                 '№': i+1,
                 'Наименование': item_name,
@@ -100,32 +106,27 @@ def create_search_report(equipment_data, scraped_data):
                 'Сайт': best_offer['site'],
                 'Статус': best_offer['status']
             })
-        
+        print(8)
         df = pd.DataFrame(report_data)
         
         # Создаем Excel книгу
         wb = Workbook()
         ws = wb.active
         ws.title = "Результаты поиска"
-        
         # Заголовки
         headers = list(df.columns)
         ws.append(headers)
-        
         # Добавляем данные
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
             for c_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
-                
                 # Раскрашиваем статус
                 if c_idx == len(headers):  # Последний столбец
                     status = value
                     color = COLOR_MAPPING.get(status, 'FFFFFF')
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-        
         # Применяем стили
         apply_style(ws)
-        
         return wb
     except Exception as e:
         logger.error(f"Ошибка создания отчета поиска: {e}")
@@ -168,7 +169,7 @@ def create_commercial_offer(equipment_data, scraped_data):
             
             # Ищем лучшую цену
             best_price = None
-            item_results = [r for r in scraped_data if similarity(r['name'], item_name) > 0.7]
+            item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.7]
             
             if item_results:
                 best_offer = min(item_results, key=lambda x: x['price'])

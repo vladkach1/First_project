@@ -61,6 +61,7 @@ def parse_equipment_spec(text):
                 continue
         
         logger.info(f"Успешно извлечено {len(equipment_list)} позиций оборудования")
+        logger.info(f"Успешно извлечено {equipment_list[0]} позиций оборудования")
         return equipment_list
     
     except Exception as e:
