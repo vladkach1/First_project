@@ -105,7 +105,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             for i in data:
                 item = {
                         'name': i[0],
-                        'quantity': i[1]
+                        'quantity': float(i[1]),
+                        'unit': i[2]
                     }
                 equipment_data.append(item)
 
@@ -142,9 +143,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             commercial_buffer = io.BytesIO()
             commercial_report.save(commercial_buffer)  # Сохраняем в буфер
             commercial_buffer.seek(0)  # Перемещаем указатель в начало
-            
+        
             await update.message.reply_document(
-                document=InputFile(report_buffer, filename='commercial_offer.xlsx'),
+                document=InputFile(commercial_buffer, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
             

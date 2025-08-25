@@ -67,52 +67,53 @@ def create_search_report(equipment_data, scraped_data):
     try:
         logger.info("Создание отчета поиска оборудования")
         
+        report_data = [] #Список подходящих по наименованию
+        result = [] #Список подходящих по наименованиям и самых дешёвых
+
+
         # Создаем DataFrame
-        report_data = []
-        
-        for i, item in enumerate(equipment_data):
+        #Выбираем самое дещёвое предложение
+        for i, need_item in enumerate(equipment_data):
+
+            report_data.clear()
+            need_name = need_item['name']
+            need_quantity = need_item['quantity']
+            need_unit = need_item['unit']
             
-            item_name = item['name']
-            
-            quantity = item['quantity']
-            
-            # Фильтруем результаты для текущего оборудования
-            item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.0001]
-            
-            if not item_results:
-                report_data.append({
+            for item in scraped_data[i]:
+                if similarity(item['name'],need_name) > 0.0001:
+                    report_data.append({
                     '№': i+1,
-                    'Наименование': item_name,
-                    'Количество': quantity,
-                    'Цена': 'Не найдено',
-                    'Сайт': '',
-                    'Статус': 'out_of_stock'
-                })
-                continue
-            
-            # Сортируем по цене (дешевле сначала)
-            # item_results.sort(key=lambda x: x['price'])
-            
-            # Выбираем лучший вариант
-            best_offer = item_results[i][0]
-            report_data.append({
-                '№': i+1,
-                'Наименование': item_name,
-                'Количество': quantity,
-                'Цена': f"{best_offer['price']} {DEFAULT_CURRENCY}",
-                'Сайт': best_offer['site'],
-                'Статус': best_offer['status']
-            })
-        df = pd.DataFrame(report_data)
-        
-        # Создаем Excel книгу
+                    'Наименование': item['name'],
+                    'Количество': need_quantity,
+                    'Ед. изм.': need_unit, 
+                    'Цена': item['price'],
+                    'Сайт': item['site'],
+                    'Статус': item['status'] 
+                    })
+            report_data.sort(key=lambda x: x['Цена'])
+            best_offer = report_data[0]
+            result.append({
+                    '№': i+1,
+                    'Наименование': best_offer['Наименование'],
+                    'Количество': need_quantity,
+                    'Ед. изм.': need_unit, 
+                    'Цена': best_offer['Цена'],
+                    'Сайт': best_offer['Сайт'],
+                    'Статус': best_offer['Статус'] 
+                    })
+        df = pd.DataFrame(result)
+
+        #Создаём книгу ексель
         wb = Workbook()
         ws = wb.active
         ws.title = "Результаты поиска"
-        # Заголовки
+
+        #Заголовки
         headers = list(df.columns)
         ws.append(headers)
-        # Добавляем данные
+
+        #Заполняем даными
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
             for c_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
@@ -121,10 +122,14 @@ def create_search_report(equipment_data, scraped_data):
                     status = value
                     color = COLOR_MAPPING.get(status, 'FFFFFF')
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+
         # Применяем стили
         apply_style(ws)
+
         return wb
+    
     except Exception as e:
+
         logger.error(f"Ошибка создания отчета поиска: {e}")
         raise RuntimeError("Ошибка генерации отчета поиска.")
 
@@ -139,74 +144,72 @@ def create_commercial_offer(equipment_data, scraped_data):
     try:
         logger.info("Создание коммерческого предложения")
         
-        # Создаем Excel книгу
+        report_data = [] #Список подходящих по наименованию
+        result = [] #Список подходящих по наименованиям и самых дешёвых
+        total_sum = 0
+
+
+        # Создаем DataFrame
+        #Выбираем самое дещёвое предложение
+        for i, need_item in enumerate(equipment_data):
+
+            report_data.clear()
+            need_name = need_item['name']
+            need_quantity = need_item['quantity']
+            need_unit = need_item['unit']
+            
+            for item in scraped_data[i]:
+                if similarity(item['name'],need_name) > 0.0001:
+                    report_data.append({
+                    '№': i+1, 
+                    'Наименование': item['name'], 
+                    'Обозначение': "1", 
+                    'Ед. изм.': need_unit, 
+                    'Кол-во': need_quantity, 
+                    'Цена за ед.': item['price'], 
+                    'Сумма, руб.': item['price']*need_quantity
+                    })
+            report_data.sort(key=lambda x: x['Цена за ед.'])
+            best_offer = report_data[0]
+            result.append({
+                    '№': i+1, 
+                    'Наименование': best_offer['Наименование'], 
+                    'Обозначение': "1", 
+                    'Ед. изм.': need_unit, 
+                    'Кол-во': need_quantity, 
+                    'Цена за ед.': best_offer['Цена за ед.'], 
+                    'Сумма, руб.': best_offer['Цена за ед.']*need_quantity
+                    })
+            total_sum += best_offer['Сумма, руб.']
+        df = pd.DataFrame(result)
+
+        #Создаём книгу ексель
         wb = Workbook()
         ws = wb.active
-        ws.title = "Коммерческое предложение"
-        
-        # Заголовки таблицы
-        headers = [
-            '№', 
-            'Наименование', 
-            'Обозначение', 
-            'Ед. изм.', 
-            'Кол-во', 
-            'Цена за ед.', 
-            'Сумма, руб.'
-        ]
+        ws.title = "Результаты поиска"
+
+        #Заголовки
+        headers = list(df.columns)
         ws.append(headers)
-        
-        total_sum = 0
-        
-        # Добавляем данные
-        for i, item in enumerate(equipment_data):
-            item_name = item['name']
-            quantity = item['quantity']
-            
-            # Ищем лучшую цену
-            best_price = None
-            item_results = [r for r in scraped_data if similarity(r[0]['name'], item_name) > 0.0001]
-            
-            if item_results:
-                best_offer = min(item_results, key=lambda x: x['price'])
-                best_price = best_offer['price']
-            else:
-                # Используем цену из PDF, если не нашли
-                best_price = item['price']
-            
-            # Рассчитываем сумму
-            total = best_price * quantity
-            total_sum += total
-            
-            # Форматируем значения
-            price_str = f"{best_price:.2f} {DEFAULT_CURRENCY}" if best_price else "Цена не найдена"
-            total_str = f"{total:.2f} {DEFAULT_CURRENCY}" if best_price else "-"
-            
-            ws.append([
-                i+1,
-                item['name'],
-                item['designation'],
-                item['unit'],
-                quantity,
-                price_str,
-                total_str
-            ])
-        
+
+        #Заполняем даными
+        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
+            for c_idx, value in enumerate(row, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                # Раскрашиваем статус
+                if c_idx == len(headers):  # Последний столбец
+                    status = value
+                    color = COLOR_MAPPING.get(status, 'FFFFFF')
+                    cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+
         # Добавляем итоговую строку
         ws.append([''] * 6 + [f"ИТОГО: {total_sum:.2f} {DEFAULT_CURRENCY}"])
-        
         # Применяем стили
         apply_style(ws)
-        
-        # Настройка итоговой строки
-        last_row = ws.max_row
-        for col in range(1, 8):
-            cell = ws.cell(row=last_row, column=col)
-            if col == 7:
-                cell.font = Font(bold=True, size=12)
-                cell.alignment = Alignment(horizontal='right')
-        
+
         return wb
+    
     except Exception as e:
+
         logger.error(f"Ошибка создания коммерческого предложения: {e}")
         raise RuntimeError("Ошибка генерации коммерческого предложения.")
