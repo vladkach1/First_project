@@ -15,7 +15,7 @@ def run_in_parallel(tasks, max_workers=5):
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Запускаем задачи
-        futures = {executor.submit(func, *args): (func, args) for func, args in tasks}
+        futures = {executor.submit(func, args): (func, args) for func, args in tasks}
         
         # Обрабатываем результаты по мере завершения
         for future in as_completed(futures):

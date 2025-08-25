@@ -60,7 +60,7 @@ def scrape_tinko(item_name):
                 
             name = name_elem.text.strip()
             price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
-            stock = stock_elem.text.strip() if stock_elem else "Доступно"
+            stock = stock_elem.text.strip() #if stock_elem else "Доступно"
             
             # Определение статуса
             status = 'available'
@@ -112,7 +112,7 @@ def search_equipment_on_sites(equipment_name):
         logger.info(f"Поиск оборудования: {equipment_name}")
         
         # Подготовка задач для параллельного выполнения
-        tasks = [(scraper, [equipment_name]) for scraper in SITE_SCRAPERS.values()]
+        tasks = [(scraper, equipment_name) for scraper in SITE_SCRAPERS.values()]
         
         # Параллельный запуск
         results = run_in_parallel(tasks, max_workers=MAX_THREADS)
