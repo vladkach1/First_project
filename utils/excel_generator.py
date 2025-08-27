@@ -92,7 +92,7 @@ def create_search_report(equipment_data, scraped_data):
                     'Сайт': item['site'],
                     'Статус': item['status'] 
                     })
-            report_data.sort(key=lambda x: x['Цена'])
+            report_data.sort(key=lambda x: x['Цена'], reverse=True)
             best_offer = report_data[0]
             result.append({
                     '№': i+1,
@@ -168,7 +168,6 @@ def create_commercial_offer(equipment_data, scraped_data):
                     report_data.append({
                     '№': i+1, 
                     'Наименование': item['name'], 
-                    'Обозначение': "1", 
                     'Ед. изм.': need_unit, 
                     'Кол-во': need_quantity, 
                     'Цена за ед.': item['price'], 
@@ -179,7 +178,6 @@ def create_commercial_offer(equipment_data, scraped_data):
             result.append({
                     '№': i+1, 
                     'Наименование': best_offer['Наименование'], 
-                    'Обозначение': "1", 
                     'Ед. изм.': need_unit, 
                     'Кол-во': need_quantity, 
                     'Цена за ед.': best_offer['Цена за ед.'], 

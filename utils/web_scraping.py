@@ -48,9 +48,22 @@ def scrape_tinko(item_name):
         
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         items = soup.select('.catalog-product')
-        
         results = []
-        for item in items[:3]:  # Первые 3 результата
+        
+        if len(items)==0:
+            results.append({
+                'site': 'Tinko',
+                'name': name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': driver.current_url
+            })
+            return results
+        list_len=3
+        if len(items)<3:
+            list_len=len(items)
+        
+        for item in items[:list_len]:  # Первые 3 результата
             name_elem = item.select_one('.catalog-product__title[itemprop="name"] a')
             price_elem = item.select_one('[itemprop="price"]')
             stock_elem = item.select_one('.vue-stock')
@@ -63,11 +76,13 @@ def scrape_tinko(item_name):
             stock = stock_elem.text.strip() #if stock_elem else "Доступно"
             
             # Определение статуса
-            status = 'available'
-            if "под заказ" in stock.lower():
-                status = 'on_request'
+            status = 'В наличии'
+            if "Под заказ" in stock.lower():
+                status = 'Под заказ'
             elif bool(re.match(r'^до \d+ дней', stock.lower())):
-                status = 'out_of_stock'
+                status = stock.lower()
+            else:
+                status = "Ошибка"
             
             results.append({
                 'site': 'Tinko',

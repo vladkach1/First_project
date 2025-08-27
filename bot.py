@@ -1,5 +1,6 @@
 import os
 import tempfile
+import re
 import logging
 import asyncio
 import io
@@ -105,12 +106,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
             equipment_data = []
-            for i in data:
-                item = {
-                        'name': i[0],
-                        'quantity': float(i[1]),
-                        'unit': i[2]
-                    }
+            for i,elem in enumerate(data,1):
+                if (len(elem)!=3):
+                    if bool(re.match(r'^[0-9]+[\.|\,]?[0-9]+$', elem[1])):
+                        item = {
+                                'name': elem[0],
+                                'quantity': float(elem[1]),
+                                'unit': elem[2]
+                            }
+                    else:
+                        await update.message.reply_text(f"❌ Некоректная строка №{i}")
+                        continue
                 equipment_data.append(item)
 
             # Этап 1: Поиск оборудования на сайтах (web_scraping)
