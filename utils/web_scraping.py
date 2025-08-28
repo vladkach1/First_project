@@ -174,29 +174,29 @@ def scrape_luis(item_name):
         logger.error(f"Ошибка парсинга luis: {e}")
         return []
     
-def scrape_laita(item_name):
-    """Парсинг сайта laita.ru"""
+def scrape_etm(item_name):
+    """Парсинг сайта etm.ru"""
     try:
-        cache_key = f"laita_{item_name}"
+        cache_key = f"etm_{item_name}"
         cached_data = cache.get(cache_key)
         if cached_data:
             return cached_data
         
         driver = setup_driver()
-        driver.get(f"https://www.layta.ru/?digiSearch=true&term={item_name}")
+        driver.get(f"https://www.etm.ru/catalog?searchValue={item_name}")
         
         # Ожидание загрузки результатов
         WebDriverWait(driver, REQUEST_TIMEOUT).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, 'div.digi-product'))
+            EC.presence_of_element_located((By.CSS_SELECTOR, '.tss-o60ib4-grid_item'))
         )
         
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        items = soup.select('div.digi-product')
+        items = soup.select('.tss-o60ib4-grid_item')
         results = []
         
         if len(items)==0:
             results.append({
-                'site': 'laita',
+                'site': 'etm',
                 'name': name,
                 'price': 0,
                 'status': "Не найдено",
@@ -206,32 +206,30 @@ def scrape_laita(item_name):
         
         for item in items[0]:  # Первый результата
             print(0000)
-            name_elem=item.select_one('a.digi-product__label')
-            price_elem = item.select_one('[class*="digi-product__unavailable"], [class*="digi-product-price-"]')
-            stock_elem = item.select_one('.digi-product__unavailable, .digi-product__available-count')
+            name_elem=item.select_one('a[data-testid="link-good-name"]')
+            price_elem = item.select_one('p.MuiTypography-title4.mui-1rtbk0o')
+            stock_elem = item.select_one('button[data-testid^="availability_link-"]')
             
             if not name_elem or not price_elem:
                 continue
                 
             name = name_elem.text.strip()
             print(price_elem.text.strip())
-            if price_elem.text.strip()!="Уточняйте у менеджера":
-                print(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
-                price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+            if (price_elem.text.strip()!="По запросу") and (price_elem.text.strip()!="Свяжитесь с нами"):
+                print(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.'))
+                price = float(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.'))
             else:
                 price = 0
             stock = stock_elem.text.strip() 
             
             # Определение статуса
-            if "цена" in stock.lower():
+            if "по запросу" in stock.lower():
                 status = 'Под заказ'
-            elif bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))):
-                status = "В наличии"
             else:
-                status = "Ошибка"
+                status = stock
             
             results.append({
-                'site': 'laita',
+                'site': 'etm',
                 'name': name,
                 'price': price,
                 'status': status,
@@ -245,7 +243,7 @@ def scrape_laita(item_name):
         
         return results
     except Exception as e:
-        logger.error(f"Ошибка парсинга laita: {e}")
+        logger.error(f"Ошибка парсинга etm: {e}")
         return []
 
 # Функции для других сайтов...
@@ -253,8 +251,8 @@ def scrape_laita(item_name):
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
-    "https://www.laita.ru": scrape_laita
-    #"https://www.etm.ru": scrape_etm
+    #"https://www.laita.ru": scrape_laita
+    "https://www.etm.ru": scrape_etm
 }
 
 def search_equipment_on_sites(equipment_name):
