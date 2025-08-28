@@ -19,12 +19,10 @@ OCR_LANGUAGE = 'rus+eng'
 
 # Настройки поиска
 SEARCH_SITES = [
-    "https://www.tinko.ru",
     "https://www.luis.ru",
+    "https://www.tinko.ru",
     "https://www.laita.ru",
-    "https://www.eltex.ru",
-    "https://www.ltv.ru",
-    "https://www.rviai.ru"
+    "https://www.etm.ru",
 ]
 MAX_THREADS = 10
 REQUEST_TIMEOUT = 30
@@ -37,7 +35,7 @@ CACHE_TTL = 3600  # 1 час
 COLOR_MAPPING = {
     'В наличии': '00FF00',      # Зеленый - полностью доступно
     'Под заказ': 'ADD8E6',     # Синий - требуется запрос
-    r'^до \d+ дней': 'FFA500',   # Оранжевый - Время доставки
+    # Оранжевый - Время доставки
     'Ошибка': 'FF0000'       # Красное - Ошибка неизвестный статус
 }
 

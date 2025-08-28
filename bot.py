@@ -104,11 +104,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             for i in lines:
                 data.append(i.rsplit(' ',2))
 
+            item={}
 
             equipment_data = []
             for i,elem in enumerate(data,1):
-                if (len(elem)!=3):
-                    if bool(re.match(r'^[0-9]+[\.|\,]?[0-9]+$', elem[1])):
+                if (len(elem)==3):
+                    if bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', elem[1])):
                         item = {
                                 'name': elem[0],
                                 'quantity': float(elem[1]),
@@ -117,6 +118,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                     else:
                         await update.message.reply_text(f"❌ Некоректная строка №{i}")
                         continue
+                else:
+                    await update.message.reply_text(f"❌ Некоректная строка №{i}")
+                    continue
                 equipment_data.append(item)
 
             # Этап 1: Поиск оборудования на сайтах (web_scraping)

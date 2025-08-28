@@ -71,18 +71,21 @@ def create_search_report(equipment_data, scraped_data):
         report_data = [] #Список подходящих по наименованию
         result = [] #Список подходящих по наименованиям и самых дешёвых
 
-
+        print(scraped_data)
         # Создаем DataFrame
         #Выбираем самое дещёвое предложение
         for i, need_item in enumerate(equipment_data):
+
 
             report_data.clear()
             need_name = need_item['name']
             need_quantity = need_item['quantity']
             need_unit = need_item['unit']
-            
+
+            coff_similarity = 0.0
             for item in scraped_data[i]:
-                if similarity(item['name'],need_name) > 0.0001:
+
+                if similarity(item['name'],need_name) > coff_similarity:
                     report_data.append({
                     '№': i+1,
                     'Наименование': item['name'],
@@ -90,9 +93,14 @@ def create_search_report(equipment_data, scraped_data):
                     'Ед. изм.': need_unit, 
                     'Цена': item['price'],
                     'Сайт': item['site'],
-                    'Статус': item['status'] 
+                    'Статус': item['status'],
+                    'Коффициент совпадения с запросом': coff_similarity
                     })
+                    coff_similarity = similarity(item['name'],need_name)
+
             report_data.sort(key=lambda x: x['Цена'], reverse=True)
+            report_data.sort(key=lambda x: x['Коффициент совпадения с запросом'], reverse=True)
+
             best_offer = report_data[0]
             result.append({
                     '№': i+1,
@@ -101,7 +109,8 @@ def create_search_report(equipment_data, scraped_data):
                     'Ед. изм.': need_unit, 
                     'Цена': best_offer['Цена'],
                     'Сайт': best_offer['Сайт'],
-                    'Статус': best_offer['Статус'] 
+                    'Статус': best_offer['Статус'],
+                    'Коффициент совпадения с запросом': coff_similarity
                     })
         df = pd.DataFrame(result)
 
@@ -112,12 +121,12 @@ def create_search_report(equipment_data, scraped_data):
 
         # Пропускаем 11 строк
         START_ROW = 12
-        
+
         # Заголовки (строка 12)
         headers = list(df.columns)
         for col_idx, header in enumerate(headers, 1):
             ws.cell(row=START_ROW, column=col_idx, value=header)
-        
+
         # Заполняем данными начиная с строки 13
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), START_ROW + 1):
             for c_idx, value in enumerate(row, 1):
@@ -126,8 +135,9 @@ def create_search_report(equipment_data, scraped_data):
                 if c_idx == len(headers):  # Последний столбец
                     status = value
                     color = COLOR_MAPPING.get(status, 'FFFFFF')
+                    if color=='FFFFFF':
+                        color='FFA500'
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-        
         # Применяем стили
         apply_style(ws)
 
@@ -164,7 +174,7 @@ def create_commercial_offer(equipment_data, scraped_data):
             need_unit = need_item['unit']
             
             for item in scraped_data[i]:
-                if similarity(item['name'],need_name) > 0.0001:
+                if similarity(item['name'],need_name) > 0.000001:
                     report_data.append({
                     '№': i+1, 
                     'Наименование': item['name'], 
@@ -173,7 +183,7 @@ def create_commercial_offer(equipment_data, scraped_data):
                     'Цена за ед.': item['price'], 
                     'Сумма, руб.': item['price']*need_quantity
                     })
-            report_data.sort(key=lambda x: x['Цена за ед.'])
+            report_data.sort(key=lambda x: x['Цена за ед.'], reverse=True)
             best_offer = report_data[0]
             result.append({
                     '№': i+1, 
@@ -213,11 +223,11 @@ def create_commercial_offer(equipment_data, scraped_data):
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
 
         # Добавляем итоговую строку
-        ws.append(['']+["ИТОГО"]+['']*4+[f"{total_sum:.2f}"])
-        ws.append(['']+["Расходные материалы"]+['']*4+[f"{total_sum:.2f}"])
-        ws.append(['']+["Итого оборудование и расходные материалы"]+['']*4+[f"{total_sum:.2f}"])
-        ws.append(['']+["Монтажные работы"]+['']*4+[f"{total_sum:.2f}"])
-        ws.append(['']+["ВСЕГО С НДС 20%:"]+['']*4+[f"{total_sum:.2f}"])
+        ws.append(['']+["ИТОГО"]+['']*3+[f"{total_sum:.2f}"])
+        ws.append(['']+["Расходные материалы"]+['']*3+[f"{total_sum:.2f}"])
+        ws.append(['']+["Итого оборудование и расходные материалы"]+['']*3+[f"{total_sum:.2f}"])
+        ws.append(['']+["Монтажные работы"]+['']*3+[f"{total_sum:.2f}"])
+        ws.append(['']+["ВСЕГО С НДС 20%:"]+['']*3+[f"{total_sum:.2f}"])
         # Применяем стили
         apply_style(ws)
 

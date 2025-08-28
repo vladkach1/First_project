@@ -59,25 +59,24 @@ def scrape_tinko(item_name):
                 'url': driver.current_url
             })
             return results
-        list_len=3
-        if len(items)<3:
-            list_len=len(items)
         
-        for item in items[:list_len]:  # Первые 3 результата
-            name_elem = item.select_one('.catalog-product__title[itemprop="name"] a')
+        for item in items[0]:  # Первый результата
+            name1_elem=item.select_one('p.catalog-product__subtitle.textTailor[itemprop="description"]')
+            name2_elem =item.select_one('.catalog-product__title[itemprop="name"] a')
             price_elem = item.select_one('[itemprop="price"]')
             stock_elem = item.select_one('.vue-stock')
             
-            if not name_elem or not price_elem:
+            if not name2_elem or not price_elem or not name1_elem:
                 continue
                 
-            name = name_elem.text.strip()
+            name = name1_elem.text.strip()+name2_elem.text.strip()
             price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
             stock = stock_elem.text.strip() #if stock_elem else "Доступно"
             
             # Определение статуса
-            status = 'В наличии'
-            if "Под заказ" in stock.lower():
+            if "в наличии" in stock.lower():
+                status = 'В наличии'
+            elif "под заказ" in stock.lower():
                 status = 'Под заказ'
             elif bool(re.match(r'^до \d+ дней', stock.lower())):
                 status = stock.lower()
@@ -103,17 +102,159 @@ def scrape_tinko(item_name):
         return []
 
 def scrape_luis(item_name):
-    """Парсинг сайта Luis.ru"""
-    # Реализация аналогична scrape_tinko
-    # ...
-    return []
+    """Парсинг сайта luis.ru"""
+    try:
+        cache_key = f"luis_{item_name}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
+        driver = setup_driver()
+        driver.get(f"https://luis.ru/catalog/search?searchString={item_name}")
+        
+        # Ожидание загрузки результатов
+        WebDriverWait(driver, REQUEST_TIMEOUT).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'div[style*="transition-delay: 0ms"]'))
+        )
+        
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        items = soup.select('div[style*="transition-delay: 0ms"]')
+        results = []
+        
+        if len(items)==0:
+            results.append({
+                'site': 'luis',
+                'name': name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': driver.current_url
+            })
+            return results
+        
+        for item in items[0]:  # Первый результата
+            name_elem=item.select_one('a.T9HTPK.CIG0OA')
+            price_elem = item.select_one('.QG9RHe > span')
+            stock_elem = item.select_one('.QG9RHe > span')
+            
+            if not name_elem or not price_elem:
+                continue
+                
+            name = name_elem.text.strip()
+            print(price_elem.text.strip())
+            if price_elem.text.strip()!="Цена":
+                print(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+                price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+            else:
+                price = 0
+            stock = stock_elem.text.strip() 
+            
+            # Определение статуса
+            if "цена" in stock.lower():
+                status = 'Под заказ'
+            elif bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))):
+                status = "В наличии"
+            else:
+                status = "Ошибка"
+            
+            results.append({
+                'site': 'luis',
+                'name': name,
+                'price': price,
+                'status': status,
+                'url': driver.current_url
+            })
+        
+        driver.quit()
+        
+        if results:
+            cache.set(cache_key, results)
+        
+        return results
+    except Exception as e:
+        logger.error(f"Ошибка парсинга luis: {e}")
+        return []
+    
+def scrape_laita(item_name):
+    """Парсинг сайта laita.ru"""
+    try:
+        cache_key = f"laita_{item_name}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
+        driver = setup_driver()
+        driver.get(f"https://www.layta.ru/?digiSearch=true&term={item_name}")
+        
+        # Ожидание загрузки результатов
+        WebDriverWait(driver, REQUEST_TIMEOUT).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'div.digi-product'))
+        )
+        
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        items = soup.select('div.digi-product')
+        results = []
+        
+        if len(items)==0:
+            results.append({
+                'site': 'laita',
+                'name': name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': driver.current_url
+            })
+            return results
+        
+        for item in items[0]:  # Первый результата
+            print(0000)
+            name_elem=item.select_one('a.digi-product__label')
+            price_elem = item.select_one('[class*="digi-product__unavailable"], [class*="digi-product-price-"]')
+            stock_elem = item.select_one('.digi-product__unavailable, .digi-product__available-count')
+            
+            if not name_elem or not price_elem:
+                continue
+                
+            name = name_elem.text.strip()
+            print(price_elem.text.strip())
+            if price_elem.text.strip()!="Уточняйте у менеджера":
+                print(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+                price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+            else:
+                price = 0
+            stock = stock_elem.text.strip() 
+            
+            # Определение статуса
+            if "цена" in stock.lower():
+                status = 'Под заказ'
+            elif bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))):
+                status = "В наличии"
+            else:
+                status = "Ошибка"
+            
+            results.append({
+                'site': 'laita',
+                'name': name,
+                'price': price,
+                'status': status,
+                'url': driver.current_url
+            })
+        
+        driver.quit()
+        
+        if results:
+            cache.set(cache_key, results)
+        
+        return results
+    except Exception as e:
+        logger.error(f"Ошибка парсинга laita: {e}")
+        return []
 
 # Функции для других сайтов...
 
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
-    # Добавьте другие сайты здесь...
+    "https://www.laita.ru": scrape_laita
+    #"https://www.etm.ru": scrape_etm
 }
 
 def search_equipment_on_sites(equipment_name):
