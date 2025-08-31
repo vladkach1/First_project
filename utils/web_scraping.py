@@ -60,7 +60,7 @@ def scrape_tinko(item_name):
             })
             return results
         
-        for item in items[0]:  # Первый результата
+        for item in items[:3]:  # Первый результата
             name1_elem=item.select_one('p.catalog-product__subtitle.textTailor[itemprop="description"]')
             name2_elem =item.select_one('.catalog-product__title[itemprop="name"] a')
             price_elem = item.select_one('[itemprop="price"]')
@@ -69,7 +69,7 @@ def scrape_tinko(item_name):
             if not name2_elem or not price_elem or not name1_elem:
                 continue
                 
-            name = name1_elem.text.strip()+name2_elem.text.strip()
+            name = name1_elem.text.strip()+" "+name2_elem.text.strip()
             price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
             stock = stock_elem.text.strip() #if stock_elem else "Доступно"
             
@@ -131,7 +131,7 @@ def scrape_luis(item_name):
             })
             return results
         
-        for item in items[0]:  # Первый результата
+        for item in items[:3]:  # Первый результата
             name_elem=item.select_one('a.T9HTPK.CIG0OA')
             price_elem = item.select_one('.QG9RHe > span')
             stock_elem = item.select_one('.QG9RHe > span')
@@ -204,16 +204,16 @@ def scrape_etm(item_name):
             })
             return results
         
-        for item in items[0]:  # Первый результата
-            print(0000)
-            name_elem=item.select_one('a[data-testid="link-good-name"]')
+        for item in items[:3]:  # Первый результата
+            name1_elem=item.select_one('a[data-testid="link-good-name"]')
+            name2_elem=item.select_one('.tss-9cdrin-good_descr_value')
             price_elem = item.select_one('p.MuiTypography-title4.mui-1rtbk0o')
             stock_elem = item.select_one('button[data-testid^="availability_link-"]')
             
-            if not name_elem or not price_elem:
+            if not name2_elem or not price_elem or not name1_elem:
                 continue
                 
-            name = name_elem.text.strip()
+            name = name1_elem.text.strip()+" "+name2_elem.text.strip()
             print(price_elem.text.strip())
             if (price_elem.text.strip()!="По запросу") and (price_elem.text.strip()!="Свяжитесь с нами"):
                 print(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.'))
@@ -240,7 +240,7 @@ def scrape_etm(item_name):
         
         if results:
             cache.set(cache_key, results)
-        
+        print(results)
         return results
     except Exception as e:
         logger.error(f"Ошибка парсинга etm: {e}")

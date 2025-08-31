@@ -70,7 +70,7 @@ def create_search_report(equipment_data, scraped_data):
         
         report_data = [] #Список подходящих по наименованию
         result = [] #Список подходящих по наименованиям и самых дешёвых
-
+        print("CUDA")
         print(scraped_data)
         # Создаем DataFrame
         #Выбираем самое дещёвое предложение
@@ -84,8 +84,8 @@ def create_search_report(equipment_data, scraped_data):
 
             coff_similarity = 0.0
             for item in scraped_data[i]:
-
-                if similarity(item['name'],need_name) > coff_similarity:
+                coff = similarity(need_name,item['name'])
+                if  coff[0] > coff_similarity:
                     report_data.append({
                     '№': i+1,
                     'Наименование': item['name'],
@@ -94,11 +94,13 @@ def create_search_report(equipment_data, scraped_data):
                     'Цена': item['price'],
                     'Сайт': item['site'],
                     'Статус': item['status'],
-                    'Коффициент совпадения с запросом': coff_similarity
+                    'Коффициент совпадения с запросом': coff_similarity,
+                    'Колличество лишних слов в названии на сайте': coff[1]
                     })
-                    coff_similarity = similarity(item['name'],need_name)
+                    coff_similarity = coff[0]
 
             report_data.sort(key=lambda x: x['Цена'], reverse=True)
+            report_data.sort(key=lambda x: x['Колличество лишних слов в названии на сайте'])
             report_data.sort(key=lambda x: x['Коффициент совпадения с запросом'], reverse=True)
 
             best_offer = report_data[0]
@@ -174,7 +176,7 @@ def create_commercial_offer(equipment_data, scraped_data):
             need_unit = need_item['unit']
             
             for item in scraped_data[i]:
-                if similarity(item['name'],need_name) > 0.000001:
+                if similarity(need_name,item['name']) > 0.000001:
                     report_data.append({
                     '№': i+1, 
                     'Наименование': item['name'], 

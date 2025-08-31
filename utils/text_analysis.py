@@ -5,9 +5,31 @@ from difflib import SequenceMatcher
 # Настройка логирования
 logger = logging.getLogger("TextAnalysis")
 
-def similarity(a, b):
+def similarity(get_string, site_string):
     """Вычисляет схожесть двух строк (0.0-1.0)"""
-    return SequenceMatcher(None, a, b).ratio()
+    get_lower = get_string.lower()
+    site_lower = site_string.lower()
+
+    get_list = get_lower.split()
+    site_list = site_lower.split()
+    all_symbol=0
+    success_symbol=0
+
+    for elem_get in get_list:
+        all_symbol+=len(elem_get)
+        max_count=0
+        for else_site in site_list:
+            count=0
+            for i in range(len(elem_get)):
+                if i>len(else_site)-1:
+                    break
+                if elem_get[i]==else_site[i]:
+                    count+=1
+            if max_count<count:
+                max_count=count
+        success_symbol+=max_count
+    return (success_symbol/all_symbol,len(site_list)-len(get_list))
+    
 
 def parse_equipment_spec(text):
     """
