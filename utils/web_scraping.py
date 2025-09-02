@@ -114,11 +114,11 @@ def scrape_luis(item_name):
         
         # Ожидание загрузки результатов
         WebDriverWait(driver, REQUEST_TIMEOUT).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, 'div[style*="transition-delay: 0ms"]'))
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'div[style*="transition-delay"]'))
         )
         
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        items = soup.select('div[style*="transition-delay: 0ms"]')
+        items = soup.select('div[style*="transition-delay"]')
         results = []
         
         if len(items)==0:
@@ -140,9 +140,7 @@ def scrape_luis(item_name):
                 continue
                 
             name = name_elem.text.strip()
-            print(price_elem.text.strip())
             if price_elem.text.strip()!="Цена":
-                print(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
                 price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
             else:
                 price = 0
@@ -174,6 +172,107 @@ def scrape_luis(item_name):
         logger.error(f"Ошибка парсинга luis: {e}")
         return []
     
+def scrape_layta(item_name):
+    """Парсинг сайта layta.ru"""
+    try:
+        cache_key = f"layta_{item_name}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+        
+        driver = setup_driver()
+        driver.set_page_load_timeout(30000)
+        driver.implicitly_wait(10000)
+        time.sleep(10)
+        driver.get(f"https://www.layta.ru/?digiSearch=true&term={item_name}&params=%7Csort%3DDEFAULT")
+        # Ожидание загрузки результатов
+        WebDriverWait(driver, REQUEST_TIMEOUT).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '.digi-product'))
+        )
+        time.sleep(10)
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        items = soup.select('.digi-product')
+        results = []
+        if len(items)==0:
+            results.append({
+                'site': 'layta',
+                'name': name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': driver.current_url
+            })
+            return results
+        for item in items[:3]:  # Первый результата
+            name_elem=item.select_one('.digi-product__label')
+            # Поиск элемента цены
+            price_elem = item.select_one('.digi-product__price')
+            if not price_elem:
+                price_elem = item.select_one('.digi-product__unavailable')
+            if not price_elem:
+                print("Ошибка1")
+            
+            # Поиск элемента наличия
+            stock_elem = item.select_one('.digi-product__available-count')
+            if not stock_elem:
+                stock_elem = item.select_one('.digi-product__unavailable')
+            if not stock_elem:
+                print("Ошибка2")
+
+            if not name_elem:
+                print("Ошибка3")
+
+            print(name_elem.text.strip())
+            print(price_elem.text.strip())
+            print(stock_elem.text.strip())
+            if not name_elem or not price_elem:
+                continue
+                
+            name = name_elem.text.strip()
+            
+            if price_elem.text.strip()!="Уточняйте у менеджера":
+                numbers = re.findall(r'[\d\s,]+', price_elem.text.strip())
+                prices = []
+
+                for num in numbers:
+                    # Заменяем запятую на точку и убираем пробелы
+                    clean_num = num.strip().replace(' ', '').replace(',', '.')
+                    if clean_num:  # проверяем, что строка не пустая
+                        try:
+                            prices.append(float(clean_num))
+                        except ValueError:
+                            continue
+
+                # Берем большую цену
+                price = max(prices) if prices else 0.0
+            else:
+                price = 0
+                status = 'Под заказ'
+            stock = stock_elem.text.strip() 
+            
+            # Определение статуса
+            if "в наличии" in stock.lower():
+                status = 'В наличии'
+            elif "под заказ" in stock.lower():
+                status = "Под заказ"
+            
+            results.append({
+                'site': 'layta',
+                'name': name,
+                'price': price,
+                'status': status,
+                'url': driver.current_url
+            })
+        
+        driver.quit()
+        
+        if results:
+            cache.set(cache_key, results)
+        
+        return results
+    except Exception as e:
+        logger.error(f"Ошибка парсинга layta: {e}")
+        return []
+
 def scrape_etm(item_name):
     """Парсинг сайта etm.ru"""
     try:
@@ -214,13 +313,11 @@ def scrape_etm(item_name):
                 continue
                 
             name = name1_elem.text.strip()+" "+name2_elem.text.strip()
-            print(price_elem.text.strip())
             if (price_elem.text.strip()!="По запросу") and (price_elem.text.strip()!="Свяжитесь с нами"):
-                print(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.'))
                 price = float(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.'))
             else:
                 price = 0
-            stock = stock_elem.text.strip() 
+            stock = stock_elem.text.strip() #Выдаёт иногда На заказ
             
             # Определение статуса
             if "по запросу" in stock.lower():
@@ -240,7 +337,6 @@ def scrape_etm(item_name):
         
         if results:
             cache.set(cache_key, results)
-        print(results)
         return results
     except Exception as e:
         logger.error(f"Ошибка парсинга etm: {e}")
@@ -251,7 +347,7 @@ def scrape_etm(item_name):
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
-    #"https://www.laita.ru": scrape_laita
+    "https://www.layta.ru": scrape_layta,
     "https://www.etm.ru": scrape_etm
 }
 

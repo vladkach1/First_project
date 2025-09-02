@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756802161.9741251,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Коммутатор MES2448P",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9A%D0%BE%D0%BC%D0%BC%D1%83%D1%82%D0%B0%D1%82%D0%BE%D1%80+MES2448P"
+    },
+    {
+      "site": "luis",
+      "name": "Модуль программного обеспечения ECCM-MES-2448P",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9A%D0%BE%D0%BC%D0%BC%D1%83%D1%82%D0%B0%D1%82%D0%BE%D1%80+MES2448P"
+    },
+    {
+      "site": "luis",
+      "name": "Коммутатор 852-1106",
+      "price": 151972.89,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9A%D0%BE%D0%BC%D0%BC%D1%83%D1%82%D0%B0%D1%82%D0%BE%D1%80+MES2448P"
+    }
+  ]
+}

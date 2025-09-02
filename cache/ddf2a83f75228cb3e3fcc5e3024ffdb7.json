@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756802134.41029,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Набор термоусадочных трубок КДЗС-40",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%93%D0%B8%D0%BB%D1%8C%D0%B7%D1%8B+%D0%9A%D0%94%D0%97%D0%A1"
+    },
+    {
+      "site": "luis",
+      "name": "Набор термоусадочных трубок КДЗС-60",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%93%D0%B8%D0%BB%D1%8C%D0%B7%D1%8B+%D0%9A%D0%94%D0%97%D0%A1"
+    },
+    {
+      "site": "luis",
+      "name": "Гильза КДЗС-6030",
+      "price": 4.82,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%93%D0%B8%D0%BB%D1%8C%D0%B7%D1%8B+%D0%9A%D0%94%D0%97%D0%A1"
+    }
+  ]
+}

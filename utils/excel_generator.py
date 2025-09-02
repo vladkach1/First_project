@@ -70,8 +70,7 @@ def create_search_report(equipment_data, scraped_data):
         
         report_data = [] #Список подходящих по наименованию
         result = [] #Список подходящих по наименованиям и самых дешёвых
-        print("CUDA")
-        print(scraped_data)
+        
         # Создаем DataFrame
         #Выбираем самое дещёвое предложение
         for i, need_item in enumerate(equipment_data):
@@ -93,9 +92,9 @@ def create_search_report(equipment_data, scraped_data):
                     'Ед. изм.': need_unit, 
                     'Цена': item['price'],
                     'Сайт': item['site'],
-                    'Статус': item['status'],
-                    'Коффициент совпадения с запросом': coff_similarity,
-                    'Колличество лишних слов в названии на сайте': coff[1]
+                    'Коффициент совпадения с запросом': coff[0],
+                    'Колличество лишних слов в названии на сайте': coff[1],
+                    'Статус': item['status']
                     })
                     coff_similarity = coff[0]
 
@@ -111,8 +110,9 @@ def create_search_report(equipment_data, scraped_data):
                     'Ед. изм.': need_unit, 
                     'Цена': best_offer['Цена'],
                     'Сайт': best_offer['Сайт'],
-                    'Статус': best_offer['Статус'],
-                    'Коффициент совпадения с запросом': coff_similarity
+                    'Коффициент совпадения с запросом': best_offer['Коффициент совпадения с запросом'],
+                    'Колличество лишних слов в названии на сайте': best_offer['Колличество лишних слов в названии на сайте'],
+                    'Статус': best_offer['Статус']
                     })
         df = pd.DataFrame(result)
 
@@ -160,32 +160,40 @@ def create_commercial_offer(equipment_data, scraped_data):
     """
     try:
         logger.info("Создание коммерческого предложения")
-        
         report_data = [] #Список подходящих по наименованию
         result = [] #Список подходящих по наименованиям и самых дешёвых
-        total_sum = 0
-
-
+        total_sum=0
         # Создаем DataFrame
         #Выбираем самое дещёвое предложение
         for i, need_item in enumerate(equipment_data):
+
 
             report_data.clear()
             need_name = need_item['name']
             need_quantity = need_item['quantity']
             need_unit = need_item['unit']
-            
+
+            coff_similarity = 0.0
             for item in scraped_data[i]:
-                if similarity(need_name,item['name']) > 0.000001:
+                coff = similarity(need_name,item['name'])
+                if  coff[0] > coff_similarity:
                     report_data.append({
-                    '№': i+1, 
-                    'Наименование': item['name'], 
+                    '№': i+1,
+                    'Наименование': item['name'],
+                    'Кол-во': need_quantity,
                     'Ед. изм.': need_unit, 
-                    'Кол-во': need_quantity, 
-                    'Цена за ед.': item['price'], 
-                    'Сумма, руб.': item['price']*need_quantity
+                    'Цена за ед.': item['price'],
+                    'Сайт': item['site'],
+                    'Коффициент совпадения с запросом': coff_similarity,
+                    'Колличество лишних слов в названии на сайте': coff[1],
+                    'Статус': item['status']
                     })
+                    coff_similarity = coff[0]
+
             report_data.sort(key=lambda x: x['Цена за ед.'], reverse=True)
+            report_data.sort(key=lambda x: x['Колличество лишних слов в названии на сайте'])
+            report_data.sort(key=lambda x: x['Коффициент совпадения с запросом'], reverse=True)
+
             best_offer = report_data[0]
             result.append({
                     '№': i+1, 
@@ -195,7 +203,7 @@ def create_commercial_offer(equipment_data, scraped_data):
                     'Цена за ед.': best_offer['Цена за ед.'], 
                     'Сумма, руб.': best_offer['Цена за ед.']*need_quantity
                     })
-            total_sum += best_offer['Сумма, руб.']
+            total_sum += best_offer['Цена за ед.']*need_quantity
         df = pd.DataFrame(result)
 
         #Создаём книгу ексель

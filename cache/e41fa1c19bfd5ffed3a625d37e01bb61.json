@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756802283.050116,
+  "content": [
+    {
+      "site": "etm",
+      "name": "Источник бесперебойного питания SKAT-UPS 6000 RACK, 220 В 5400Вт 16/18/20 АКБ чистый синус ток заряда 6 А 477",
+      "price": 255530.15,
+      "status": "На заказ",
+      "url": "https://www.etm.ru/catalog?searchValue=SKAT-UPS%206000%20RACK"
+    },
+    {
+      "site": "etm",
+      "name": "Источник бесперебойного питания Online SKAT-UPS 6000 ВА/5400 Вт фазы 3/1 без АКБ Tower клеммы, RS-232 USB, SNMP, ''сухой контакт'', RJ45'' 8992",
+      "price": 0,
+      "status": "C 10.09.25\n2 шт.",
+      "url": "https://www.etm.ru/catalog?searchValue=SKAT-UPS%206000%20RACK"
+    },
+    {
+      "site": "etm",
+      "name": "Источник бесперебойного питания Online, SKAT-UPS 6000-RACK-ON P3, 6000 ВА/6000 Вт, 1/1, Rack/Tower, внешн. АКБ 192В, ток заряда 15А 8776",
+      "price": 255530.15,
+      "status": "На заказ",
+      "url": "https://www.etm.ru/catalog?searchValue=SKAT-UPS%206000%20RACK"
+    }
+  ]
+}

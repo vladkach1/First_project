@@ -7,8 +7,9 @@ logger = logging.getLogger("TextAnalysis")
 
 def similarity(get_string, site_string):
     """Вычисляет схожесть двух строк (0.0-1.0)"""
-    get_lower = get_string.lower()
-    site_lower = site_string.lower()
+    re.sub(r'\s+', ' ', get_string.lower())
+    get_lower = re.sub(r'\s+', ' ', get_string.lower()).strip()
+    site_lower = re.sub(r'\s+', ' ', site_string.lower()).strip()
 
     get_list = get_lower.split()
     site_list = site_lower.split()

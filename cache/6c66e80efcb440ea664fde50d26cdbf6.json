@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756801930.612654,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Блок розеток SHT19-9SH-2.5EU",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%91%D0%BB%D0%BE%D0%BA%D0%B8+%D1%80%D0%BE%D0%B7%D0%B5%D1%82%D0%BE%D0%BA+SHT19-9SH-2.5EU"
+    },
+    {
+      "site": "luis",
+      "name": "Блок розеток SHE19-9SH-2.5EU",
+      "price": 4370.4,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%91%D0%BB%D0%BE%D0%BA%D0%B8+%D1%80%D0%BE%D0%B7%D0%B5%D1%82%D0%BE%D0%BA+SHT19-9SH-2.5EU"
+    },
+    {
+      "site": "luis",
+      "name": "Блок розеток SHT19-9SH-2.5IEC",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%91%D0%BB%D0%BE%D0%BA%D0%B8+%D1%80%D0%BE%D0%B7%D0%B5%D1%82%D0%BE%D0%BA+SHT19-9SH-2.5EU"
+    }
+  ]
+}

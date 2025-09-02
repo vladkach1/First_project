@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756802113.27325,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Патч-корд оптический SC/UPC SM",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9F%D0%B8%D0%B3%D1%82%D0%B5%D0%B9%D0%BB+%D0%9E%D0%BF%D1%82%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B9+(Pigtail),+SC/UPC,+SM,+simplex+1.0+meters,+0.9+PVC"
+    },
+    {
+      "site": "luis",
+      "name": "Адаптер оптический SC/UPC SM",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9F%D0%B8%D0%B3%D1%82%D0%B5%D0%B9%D0%BB+%D0%9E%D0%BF%D1%82%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B9+(Pigtail),+SC/UPC,+SM,+simplex+1.0+meters,+0.9+PVC"
+    },
+    {
+      "site": "luis",
+      "name": "Пигтейл pigtail SC/UPC SM 0.5 m",
+      "price": 29.63,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9F%D0%B8%D0%B3%D1%82%D0%B5%D0%B9%D0%BB+%D0%9E%D0%BF%D1%82%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B9+(Pigtail),+SC/UPC,+SM,+simplex+1.0+meters,+0.9+PVC"
+    }
+  ]
+}

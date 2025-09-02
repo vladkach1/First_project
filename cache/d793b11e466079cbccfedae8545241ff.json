@@ -1,0 +1,26 @@
+{
+  "timestamp": 1756802234.0953941,
+  "content": [
+    {
+      "site": "Tinko",
+      "name": "SFP-модуль NS-SFP-S-LC35-G-20",
+      "price": 2000.0,
+      "status": "Под заказ",
+      "url": "https://www.tinko.ru/search/?q=SFP+%D0%BC%D0%BE%D0%B4%D1%83%D0%BB%D1%8C+RSM1W36S20"
+    },
+    {
+      "site": "Tinko",
+      "name": "SFP-модуль NS-SFP-S-LC53-G-20",
+      "price": 2000.0,
+      "status": "Под заказ",
+      "url": "https://www.tinko.ru/search/?q=SFP+%D0%BC%D0%BE%D0%B4%D1%83%D0%BB%D1%8C+RSM1W36S20"
+    },
+    {
+      "site": "Tinko",
+      "name": "SFP-модуль NS-SFP-S-SC35-F-20",
+      "price": 1680.0,
+      "status": "Под заказ",
+      "url": "https://www.tinko.ru/search/?q=SFP+%D0%BC%D0%BE%D0%B4%D1%83%D0%BB%D1%8C+RSM1W36S20"
+    }
+  ]
+}
