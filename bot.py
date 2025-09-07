@@ -97,13 +97,34 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             
             user_text = update.message.text
             
-            lines = user_text.split('\n')
+            lines = user_text.split('\n\n')
 
             data=[]
+            z=[]
 
             for i in lines:
-                data.append(i.rsplit(' ',2))
+                z=[]
+                name=""
+                col=""
+                unit=""
+                q=i.split('\n')
+                for j in q:
+                    w = j.split(": ")
+                    if w[0]=="Наименование" or w[0]=="Марка/Модель" or w[0]=="Характеристика" or w[0]=="Техническая характеристика":
+                        name+=w[1]+" "
+                    elif w[0]=="Количество":
+                        col=w[1]
+                    elif w[0]=="Ед. измерения":
+                        unit=w[1]
+                    else:
+                        print("ошибкаКИРИЛЛ",w)
+                z.append(name)
+                z.append(col)
+                z.append(unit)
+                data.append(z)
+                print(data)
 
+            print(data)
             item={}
 
             equipment_data = []
