@@ -1,14 +1,18 @@
 import os
+import logging
+import asyncio
+import tempfile
 import pandas as pd
 import pdfplumber
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-import tempfile
-import logging
-import asyncio
 import re
-from openpyxl import Workbook, load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
+import fitz  # PyMuPDF
+import pytesseract
+from PIL import Image
+import io
+import numpy as np
+import cv2
 
 # Настройка логирования
 logging.basicConfig(
@@ -17,241 +21,329 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class PDFToExcelBot:
-    def __init__(self, token):
+class PDFEquipmentBot:
+    def __init__(self, token: str):
         self.token = token
         self.application = Application.builder().token(self.token).build()
-        
-        # Обработчики команд
-        self.application.add_handler(CommandHandler("start", self.start))
+        self.setup_handlers()
+    
+    def setup_handlers(self):
+        """Настройка обработчиков команд и сообщений"""
+        self.application.add_handler(CommandHandler("start", self.start_command))
+        self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(MessageHandler(filters.Document.ALL, self.handle_document))
     
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start"""
         user = update.message.from_user
-        await update.message.reply_text(
-            f"Привет, {user.first_name}! Я бот для конвертации PDF спецификаций в Excel. "
-            "Просто отправь мне PDF-файл, и я преобразую его в таблицу Excel."
+        welcome_text = (
+            f"👋 Привет, {user.first_name}!\n\n"
+            "Я бот для конвертации PDF спецификаций оборудования в Excel.\n\n"
+            "📋 Что я умею:\n"
+            "• Извлекать данные об оборудовании из PDF\n"
+            "• Конвертировать в удобный Excel формат\n"
+            "• Распознавать модели, количества и характеристики\n\n"
+            "📎 Просто отправь мне PDF файл со спецификацией!"
         )
+        await update.message.reply_text(welcome_text)
     
-    def pdf_to_excel(self, pdf_path, excel_path):
-        """Конвертирует PDF в Excel, сохраняя структуру данных"""
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /help"""
+        help_text = (
+            "ℹ️ Помощь по использованию бота:\n\n"
+            "1. 📎 Отправь мне PDF файл со спецификацией оборудования\n"
+            "2. ⏳ Подожди немного пока я обработаю файл\n"
+            "3. 📊 Получи Excel файл с извлеченными данными\n\n"
+            "Поддерживаю даже сложные PDF с особыми шрифтами!"
+        )
+        await update.message.reply_text(help_text)
+    
+    def has_cid_text(self, pdf_path: str) -> bool:
+        """Проверяет, содержит ли PDF CID текст"""
         try:
-            wb = Workbook()
-            wb.remove(wb.active)  # Удаляем дефолтный лист
-            
             with pdfplumber.open(pdf_path) as pdf:
-                for page_num, page in enumerate(pdf.pages):
-                    logger.info(f"Обработка страницы {page_num + 1}")
-                    
-                    # Создаем лист для каждой страницы
-                    ws = wb.create_sheet(title=f"Страница_{page_num + 1}")
-                    
-                    # Извлекаем текст со страницы
-                    text = page.extract_text()
-                    if text:
-                        # Записываем текст в Excel
-                        lines = text.split('\n')
-                        for row_idx, line in enumerate(lines, 1):
-                            if line.strip():
-                                ws.cell(row=row_idx, column=1, value=line.strip())
-                    
-                    # Пытаемся извлечь таблицы
-                    tables = page.extract_tables()
-                    logger.info(f"Найдено таблиц: {len(tables)}")
-                    
-                    for table_num, table in enumerate(tables):
-                        if table:
-                            # Создаем отдельный лист для каждой таблицы
-                            table_ws = wb.create_sheet(title=f"Таблица_{page_num+1}_{table_num+1}")
-                            
-                            # Записываем таблицу в Excel
-                            for row_idx, row in enumerate(table, 1):
-                                for col_idx, cell in enumerate(row, 1):
-                                    if cell:
-                                        table_ws.cell(row=row_idx, column=col_idx, value=str(cell).strip())
-            
-            # Сохраняем Excel файл
-            wb.save(excel_path)
-            logger.info(f"Excel файл создан: {excel_path}")
+                first_page = pdf.pages[0]
+                text = first_page.extract_text()
+                # Если текст содержит CID-символы или очень короткий
+                return not text or len(text.strip()) < 50 or '(cid:' in text
+        except:
             return True
-            
-        except Exception as e:
-            logger.error(f"Ошибка при конвертации PDF в Excel: {e}")
-            return False
     
-    def extract_data_from_excel(self, excel_path):
-        """Извлекает и анализирует данные из Excel файла"""
-        all_data = []
-        
+    def extract_text_with_ocr(self, pdf_path: str) -> str:
+        """Извлекает текст из PDF с помощью OCR"""
+        full_text = ""
         try:
-            wb = load_workbook(excel_path)
-            logger.info(f"Открыт Excel файл с листами: {wb.sheetnames}")
-            
-            for sheet_name in wb.sheetnames:
-                ws = wb[sheet_name]
-                logger.info(f"Анализ листа: {sheet_name}")
+            doc = fitz.open(pdf_path)
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
                 
-                # Собираем все данные с листа
-                sheet_data = []
-                for row in ws.iter_rows(values_only=True):
-                    if any(cell for cell in row):
-                        cleaned_row = [str(cell).strip() if cell else '' for cell in row]
-                        sheet_data.append(cleaned_row)
+                # Получаем изображение страницы с высоким разрешением
+                mat = fitz.Matrix(3, 3)  # Высокое разрешение для лучшего OCR
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("png")
                 
-                if sheet_data:
-                    logger.info(f"На листе '{sheet_name}' найдено {len(sheet_data)} строк")
-                    all_data.extend(sheet_data)
+                # Преобразуем в изображение PIL
+                img = Image.open(io.BytesIO(img_data))
+                
+                # Улучшаем изображение для OCR
+                img = self.enhance_image(img)
+                
+                # Применяем OCR
+                text = pytesseract.image_to_string(img, lang='rus+eng')
+                full_text += f"--- Страница {page_num + 1} ---\n{text}\n\n"
             
-            return all_data
-            
+            doc.close()
         except Exception as e:
-            logger.error(f"Ошибка при чтении Excel: {e}")
-            return []
+            logger.error(f"Ошибка OCR: {e}")
+        
+        return full_text
     
-    def process_to_final_excel(self, data, output_path):
-        """Создает финальный Excel с обработанными данными"""
-        if not data:
-            return False
-        
+    def enhance_image(self, img: Image.Image) -> Image.Image:
+        """Улучшает изображение для лучшего распознавания OCR"""
         try:
-            # Создаем новый Excel файл для результата
-            result_wb = Workbook()
-            result_ws = result_wb.active
-            result_ws.title = "Обработанные_данные"
+            # Конвертируем в numpy array
+            img_array = np.array(img)
             
-            # Записываем данные
-            for row_idx, row in enumerate(data, 1):
-                for col_idx, value in enumerate(row, 1):
-                    result_ws.cell(row=row_idx, column=col_idx, value=value)
+            # Конвертируем RGB в BGR для OpenCV
+            if len(img_array.shape) == 3:
+                img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
             
-            # Автоподбор ширины колонок
-            for column in result_ws.columns:
-                max_length = 0
-                column_letter = column[0].column_letter
-                for cell in column:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                result_ws.column_dimensions[column_letter].width = max_length + 2
+            # Увеличиваем контраст
+            lab = cv2.cvtColor(img_array, cv2.COLOR_BGR2LAB)
+            l, a, b = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            cl = clahe.apply(l)
+            enhanced_lab = cv2.merge((cl, a, b))
+            enhanced = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
             
-            result_wb.save(output_path)
-            logger.info(f"Финальный Excel создан: {output_path}")
-            return True
+            # Конвертируем обратно в RGB
+            enhanced_rgb = cv2.cvtColor(enhanced, cv2.COLOR_BGR2RGB)
+            return Image.fromarray(enhanced_rgb)
             
         except Exception as e:
-            logger.error(f"Ошибка при создании финального Excel: {e}")
-            return False
+            logger.error(f"Ошибка улучшения изображения: {e}")
+            return img
+    
+    def extract_equipment_data(self, pdf_path: str) -> list:
+        """Извлекает данные об оборудовании из PDF"""
+        equipment_data = []
+        
+        # Проверяем тип PDF
+        if self.has_cid_text(pdf_path):
+            logger.info("Обнаружен PDF с CID текстом, использую OCR")
+            text = self.extract_text_with_ocr(pdf_path)
+            equipment_data = self.parse_text_data(text)
+        else:
+            logger.info("Обычный PDF, использую стандартное извлечение")
+            try:
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page in pdf.pages:
+                        text = page.extract_text()
+                        if text:
+                            page_data = self.parse_text_data(text)
+                            equipment_data.extend(page_data)
+            except Exception as e:
+                logger.error(f"Ошибка стандартного извлечения: {e}")
+                # Пробуем OCR как fallback
+                text = self.extract_text_with_ocr(pdf_path)
+                equipment_data = self.parse_text_data(text)
+        
+        return equipment_data
+    
+    def parse_text_data(self, text: str) -> list:
+        """Парсит текст для извлечения данных об оборудовании"""
+        equipment_list = []
+        lines = text.split('\n')
+        
+        current_section = ""
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Определяем разделы
+            section_keywords = {
+                'приборы': 'Приборы и блоки',
+                'блоки': 'Приборы и блоки',
+                'индикаторы': 'Индикаторы',
+                'источники': 'Источники питания',
+                'отображение': 'Отображение',
+                'устройства': 'Прочие устройства',
+                'кабели': 'Кабели и провода'
+            }
+            
+            for keyword, section in section_keywords.items():
+                if keyword in line.lower():
+                    current_section = section
+                    break
+            
+            # Парсим строки с оборудованием
+            equipment = self.parse_equipment_line(line, current_section)
+            if equipment:
+                equipment_list.append(equipment)
+        
+        return equipment_list
+    
+    def parse_equipment_line(self, line: str, section: str = "") -> dict:
+        """Парсит строку для извлечения информации об оборудовании"""
+        # Очищаем строку
+        line = re.sub(r'\s+', ' ', line.strip())
+        
+        # Пропускаем служебные строки
+        skip_keywords = ['страница', 'лист', 'дата', 'подпись', 'заказ', 'проект', 'смета']
+        if any(keyword in line.lower() for keyword in skip_keywords):
+            return None
+        
+        # Ищем количество
+        quantity_patterns = [
+            r'(\d+)\s*шт\.?$', r'(\d+)\s*м\.?$', r'(\d+)\s*кг\.?$',
+            r'(\d+)\s*компл\.?$', r'(\d+)\s*уп\.?$', r'(\d+)\s*$'
+        ]
+        
+        quantity = None
+        unit = "шт."
+        
+        for pattern in quantity_patterns:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if match:
+                quantity = match.group(1)
+                # Определяем единицу измерения
+                if 'м.' in pattern: unit = "м"
+                elif 'кг.' in pattern: unit = "кг"
+                elif 'компл.' in pattern: unit = "компл"
+                elif 'уп.' in pattern: unit = "упак."
+                line = line[:match.start()].strip()
+                break
+        
+        if not quantity:
+            return None
+        
+        # Ищем модель/артикул (обычно содержит цифры, буквы, дефисы)
+        model_patterns = [
+            r'([A-ZА-Я0-9\-–—\.\/]+(?:\s+[A-ZА-Я0-9\-–—\.\/]+)*)$',
+            r'([A-ZА-Я]{2,}[\-\s]*[0-9]+[A-ZА-Я0-9\-]*)',
+            r'(№?\s*[0-9\-–—]+[A-ZА-Я]*)'
+        ]
+        
+        model = ""
+        for pattern in model_patterns:
+            match = re.search(pattern, line)
+            if match:
+                model = match.group(1).strip()
+                line = line.replace(model, '').strip()
+                break
+        
+        # Остаток - название
+        name = line.strip()
+        
+        # Очищаем название от мусора
+        name = re.sub(r'[^\w\sа-яА-ЯёЁ\-–—\.]', ' ', name)
+        name = re.sub(r'\s+', ' ', name).strip()
+        
+        if len(name) < 2:  # Слишком короткое название
+            return None
+        
+        return {
+            'Раздел': section,
+            'Наименование': name,
+            'Модель_Артикул': model,
+            'Количество': quantity,
+            'Единица_измерения': unit
+        }
     
     async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик документов (PDF файлов)"""
-        user = update.message.from_user
+        """Обработчик PDF документов"""
         document = update.message.document
         
-        # Проверяем, что файл является PDF
         if not document.file_name.lower().endswith('.pdf'):
-            await update.message.reply_text("Пожалуйста, отправьте PDF-файл.")
+            await update.message.reply_text("❌ Пожалуйста, отправьте PDF файл.")
             return
         
-        await update.message.reply_text("🔍 Начинаю обработку PDF-файла...")
-        logger.info(f"Начата обработка файла: {document.file_name}")
+        status_message = await update.message.reply_text("🔄 Обрабатываю PDF файл...")
         
         tmp_pdf_path = None
-        tmp_intermediate_excel = None
-        tmp_final_excel = None
+        tmp_excel_path = None
         
         try:
             # Создаем временные файлы
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
                 tmp_pdf_path = tmp_pdf.name
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='_intermediate.xlsx') as tmp_excel:
-                tmp_intermediate_excel = tmp_excel.name
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_excel:
+                tmp_excel_path = tmp_excel.name
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='_final.xlsx') as tmp_final:
-                tmp_final_excel = tmp_final.name
-            
-            # Скачиваем PDF файл
-            file_id = document.file_id
-            file = await context.bot.get_file(file_id)
+            # Скачиваем файл
+            file = await context.bot.get_file(document.file_id)
             await file.download_to_drive(tmp_pdf_path)
-            logger.info(f"PDF файл скачан: {tmp_pdf_path}")
             
-            # Шаг 1: Конвертируем PDF в промежуточный Excel
-            await update.message.reply_text("📊 Конвертирую PDF в Excel...")
-            conversion_success = self.pdf_to_excel(tmp_pdf_path, tmp_intermediate_excel)
+            await status_message.edit_text("📊 Извлекаю данные...")
             
-            if not conversion_success:
-                await update.message.reply_text("❌ Не удалось конвертировать PDF в Excel.")
-                return
+            # Извлекаем данные
+            equipment_data = self.extract_equipment_data(tmp_pdf_path)
             
-            # Шаг 2: Извлекаем данные из промежуточного Excel
-            await update.message.reply_text("🔍 Анализирую данные в Excel...")
-            excel_data = self.extract_data_from_excel(tmp_intermediate_excel)
-            
-            if not excel_data:
-                await update.message.reply_text("⚠️ В Excel файле не найдено данных для обработки.")
-                return
-            
-            logger.info(f"Извлечено {len(excel_data)} строк данных из Excel")
-            
-            # Шаг 3: Создаем финальный Excel
-            await update.message.reply_text("💾 Создаю финальную таблицу...")
-            final_success = self.process_to_final_excel(excel_data, tmp_final_excel)
-            
-            if not final_success:
-                await update.message.reply_text("❌ Не удалось создать финальную таблицу.")
-                return
-            
-            # Шаг 4: Отправляем результат пользователю
-            with open(tmp_final_excel, 'rb') as final_file:
-                await update.message.reply_document(
-                    document=final_file,
-                    filename=document.file_name.replace('.pdf', '_обработанный.xlsx'),
-                    caption="✅ Файл успешно обработан! 📊"
+            if not equipment_data:
+                await status_message.edit_text(
+                    "❌ Не удалось извлечь данные оборудования.\n"
+                    "Файл может быть защищен или иметь очень сложное форматирование."
                 )
+                return
             
-            # Также отправляем промежуточный Excel для отладки
-            with open(tmp_intermediate_excel, 'rb') as intermediate_file:
+            # Создаем Excel
+            await status_message.edit_text("💾 Формирую Excel...")
+            
+            df = pd.DataFrame(equipment_data)
+            df.to_excel(tmp_excel_path, index=False, engine='openpyxl')
+            
+            # Отправляем результат
+            await status_message.edit_text("✅ Готово!")
+            
+            with open(tmp_excel_path, 'rb') as excel_file:
                 await update.message.reply_document(
-                    document=intermediate_file,
-                    filename=document.file_name.replace('.pdf', '_промежуточный.xlsx'),
-                    caption="📋 Промежуточный файл (все данные)"
+                    document=excel_file,
+                    filename=f"Спецификация_{document.file_name.replace('.pdf', '.xlsx')}",
+                    caption=f"📋 Извлечено {len(equipment_data)} позиций оборудования"
                 )
-            
-            await update.message.reply_text(
-                f"🎉 Обработка завершена успешно!\n"
-                f"• Извлечено строк данных: {len(excel_data)}\n"
-                f"• Отправлено 2 файла: обработанный и промежуточный"
-            )
             
         except Exception as e:
-            logger.error(f"Ошибка обработки: {e}", exc_info=True)
-            await update.message.reply_text(f"❌ Произошла ошибка: {str(e)}")
+            logger.error(f"Ошибка обработки: {e}")
+            await update.message.reply_text("❌ Ошибка обработки файла. Попробуйте другой PDF.")
         
         finally:
             # Удаляем временные файлы
-            await asyncio.sleep(3)
-            self.cleanup_files([tmp_pdf_path, tmp_intermediate_excel, tmp_final_excel])
-    
-    def cleanup_files(self, file_paths):
-        """Удаляет временные файлы"""
-        for file_path in file_paths:
-            if file_path and os.path.exists(file_path):
-                try:
-                    os.unlink(file_path)
-                    logger.info(f"Удален временный файл: {file_path}")
-                except PermissionError as e:
-                    logger.warning(f"Не удалось удалить {file_path}: {e}")
+            for file_path in [tmp_pdf_path, tmp_excel_path]:
+                if file_path and os.path.exists(file_path):
+                    try:
+                        os.unlink(file_path)
+                    except:
+                        pass
+            try:
+                await status_message.delete()
+            except:
+                pass
     
     def run(self):
-        """Запускает бота"""
-        print("🤖 Бот запущен. Ожидание PDF файлов...")
+        """Запуск бота"""
         logger.info("Бот запущен")
+        print("🤖 Бот для обработки PDF с оборудованием запущен!")
         self.application.run_polling()
 
-# Токен вашего бота
+# Токен бота
 BOT_TOKEN = "8246578993:AAGaUxNEW2LCIdh6qLp3Ee9fyTY0z8muMc4"
 
 if __name__ == "__main__":
-    bot = PDFToExcelBot(BOT_TOKEN)
+    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
+        print("❌ Укажите действительный BOT_TOKEN")
+        exit(1)
+    
+    # Проверяем наличие Tesseract
+    try:
+        pytesseract.get_tesseract_version()
+    except:
+        print("⚠️  Tesseract OCR не установлен. Установите:")
+        print("Windows: https://github.com/UB-Mannheim/tesseract/wiki")
+        print("Linux: sudo apt install tesseract-ocr tesseract-ocr-rus")
+        print("Mac: brew install tesseract tesseract-lang")
+    
+    bot = PDFEquipmentBot(BOT_TOKEN)
     bot.run()
