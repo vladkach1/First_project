@@ -6,45 +6,16 @@ from pdfminer.layout import LTTextContainer, LTChar, LTRect, LTFigure
 # To extract text from tables in PDF
 import pdfplumber
 # To extract the images from the PDFs
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image
 from pdf2image import convert_from_path
 # To perform OCR to extract text from images 
 import pytesseract 
 # To remove the additional created files
 import os
 import re
-# For image processing
-import cv2
-import numpy as np
 
 # Установите путь к Tesseract OCR (если нужно)
 pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
-
-# Функция для улучшения качества изображения перед OCR
-def enhance_image_for_ocr(image_path):
-    # Читаем изображение
-    img = cv2.imread(image_path)
-    
-    # Конвертируем в grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Применяем размытие для уменьшения шума
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Применяем адаптивный threshold
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                  cv2.THRESH_BINARY, 11, 2)
-    
-    # Увеличиваем контраст
-    alpha = 1.5  # Contrast control (1.0-3.0)
-    beta = 0     # Brightness control (0-100)
-    enhanced = cv2.convertScaleAbs(thresh, alpha=alpha, beta=beta)
-    
-    # Сохраняем обработанное изображение
-    enhanced_path = 'enhanced_' + image_path
-    cv2.imwrite(enhanced_path, enhanced)
-    
-    return enhanced_path
 
 # Create function to extract text
 def text_extraction(element):
@@ -138,23 +109,13 @@ def convert_to_images(input_file,):
     image = images[0]
     output_file = 'PDF_image.png'
     image.save(output_file, 'PNG')
-    return output_file
 
 # Create a function to read text from images with Russian language support
 def image_to_text(image_path):
-    # Улучшаем качество изображения
-    enhanced_image_path = enhance_image_for_ocr(image_path)
-    
-    # Read the enhanced image
-    img = Image.open(enhanced_image_path)
-    
+    # Read the image
+    img = Image.open(image_path)
     # Extract the text from the image with Russian language
-    custom_config = r'--oem 3 --psm 6 -l rus+eng'
-    text = pytesseract.image_to_string(img, config=custom_config)
-    
-    # Удаляем временные файлы
-    os.remove(enhanced_image_path)
-    
+    text = pytesseract.image_to_string(img, lang='rus+eng')  # Добавлена поддержка русского
     return text
 
 # Функция для проверки наличия (cid:) символов в тексте
@@ -172,13 +133,11 @@ def process_page_with_cid(pdf_path, page_num):
             temp_image_path = f'temp_page_{page_num}.png'
             image.save(temp_image_path, 'PNG')
             
-            # Улучшаем качество изображения и извлекаем текст через OCR
-            enhanced_image_path = enhance_image_for_ocr(temp_image_path)
-            text = image_to_text(enhanced_image_path)
+            # Извлекаем текст через OCR
+            text = image_to_text(temp_image_path)
             
-            # Удаляем временные файлы
+            # Удаляем временный файл
             os.remove(temp_image_path)
-            os.remove(enhanced_image_path)
             
             return text
         return ""
@@ -286,8 +245,8 @@ for pagenum, page in enumerate(extract_pages(pdf_path)):
                 if has_cid_chars(line_text):
                     # Если содержит, обрабатываем этот элемент как изображение через OCR
                     crop_image(element, pageObj)
-                    image_path = convert_to_images('cropped_image.pdf')
-                    image_text = image_to_text(image_path)
+                    convert_to_images('cropped_image.pdf')
+                    image_text = image_to_text('PDF_image.png')
                     
                     # Добавляем OCR текст вместо (cid:) текста
                     page_content.append(image_text)
@@ -306,9 +265,9 @@ for pagenum, page in enumerate(extract_pages(pdf_path)):
                 # Crop the image from PDF
                 crop_image(element, pageObj)
                 # Convert the croped pdf to image
-                image_path = convert_to_images('cropped_image.pdf')
+                convert_to_images('cropped_image.pdf')
                 # Extract the text from image with Russian support
-                image_text = image_to_text(image_path)
+                image_text = image_to_text('PDF_image.png')
                 text_from_images.append(image_text)
                 page_content.append(image_text)
                 # Add a placeholder in the text and format lists
@@ -328,8 +287,7 @@ pdfFileObj.close()
 # Delete the additional files created if image is detected
 if image_flag:
     os.remove('cropped_image.pdf')
-    if os.path.exists('PDF_image.png'):
-        os.remove('PDF_image.png')
+    os.remove('PDF_image.png')
 
 # Display the content of the page with proper encoding
 for page_key in text_per_page.keys():
