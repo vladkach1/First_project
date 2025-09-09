@@ -8,12 +8,15 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 import re
 import fitz  # PyMuPDF
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 import io
 import numpy as np
 import cv2
 import subprocess
 from pathlib import Path
+from deskew import determine_skew
+import json
+from typing import List, Dict, Tuple, Optional
 
 # Настройка логирования
 logging.basicConfig(
@@ -86,7 +89,7 @@ class PDFEquipmentBot:
             return input_pdf_path
     
     def convert_pdf_to_images(self, pdf_path: str) -> list:
-        """Конвертирует PDF в список изображений с обработкой ошибок"""
+        """Конвертирует PDF в список изображений с улучшенной обработкой"""
         images = []
         try:
             # Пытаемся открыть PDF с восстановлением
@@ -107,6 +110,9 @@ class PDFEquipmentBot:
                     
                     img_data = pix.tobytes("png")
                     img = Image.open(io.BytesIO(img_data))
+                    
+                    # Выравнивание изображения
+                    img = self.deskew_image(img)
                     images.append(img)
                     
                 except Exception as page_error:
@@ -121,8 +127,42 @@ class PDFEquipmentBot:
         
         return images
     
+    def deskew_image(self, image: Image.Image) -> Image.Image:
+        """Выравнивает перекошенное изображение"""
+        try:
+            image_np = np.array(image)
+            if len(image_np.shape) == 3:
+                grayscale = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+            else:
+                grayscale = image_np
+            
+            # Определяем угол наклона
+            angle = determine_skew(grayscale)
+            
+            if angle is not None and abs(angle) > 0.5:  # Поворачиваем только если угол значительный
+                # Поворачиваем изображение
+                height, width = grayscale.shape[:2]
+                center = (width // 2, height // 2)
+                rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+                
+                if len(image_np.shape) == 3:
+                    rotated = cv2.warpAffine(
+                        image_np, rotation_matrix, (width, height),
+                        flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+                    )
+                else:
+                    rotated = cv2.warpAffine(
+                        image_np, rotation_matrix, (width, height),
+                        flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+                    )
+                return Image.fromarray(rotated)
+        except Exception as e:
+            logger.warning(f"Не удалось выровнять изображение: {e}")
+        
+        return image
+    
     def enhance_image_for_technical_ocr(self, img: Image.Image) -> Image.Image:
-        """Специальное улучшение изображения для технических документов"""
+        """Улучшение изображения для технического OCR"""
         try:
             img_array = np.array(img)
             
@@ -132,34 +172,143 @@ class PDFEquipmentBot:
             else:
                 gray = img_array
             
-            # Адаптивное пороговое преобразование
-            gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                       cv2.THRESH_BINARY, 11, 2)
+            # Увеличиваем контраст
+            gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
             
-            # Морфологические операции для очистки
+            # Адаптивное пороговое преобразование
+            gray = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                cv2.THRESH_BINARY, 11, 2
+            )
+            
+            # Удаление шума
             kernel = np.ones((1, 1), np.uint8)
-            gray = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+            gray = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel)
             gray = cv2.medianBlur(gray, 3)
             
             # Увеличение резкости
-            kernel_sharp = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+            kernel_sharp = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
             gray = cv2.filter2D(gray, -1, kernel_sharp)
             
             return Image.fromarray(gray)
-            
         except Exception as e:
             logger.error(f"Ошибка улучшения изображения: {e}")
             return img
     
+    def detect_table_structure(self, img: Image.Image) -> Tuple[List, List]:
+        """Обнаруживает структуру таблицы на изображении"""
+        try:
+            img_array = np.array(img)
+            if len(img_array.shape) == 3:
+                gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = img_array
+            
+            # Бинаризация
+            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+            
+            # Детекция линий
+            horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+            vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
+            
+            # Применяем морфологические операции для выделения линий
+            horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
+            vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
+            
+            # Находим контуры линий
+            h_contours, _ = cv2.findContours(horizontal_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            v_contours, _ = cv2.findContours(vertical_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Извлекаем координаты линий
+            h_lines = []
+            for contour in h_contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                if w > img_array.shape[1] * 0.5:  # Только длинные линии
+                    h_lines.append(y + h // 2)
+            
+            v_lines = []
+            for contour in v_contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                if h > img_array.shape[0] * 0.5:  # Только длинные линии
+                    v_lines.append(x + w // 2)
+            
+            # Сортируем и удаляем дубликаты
+            h_lines = sorted(set(h_lines))
+            v_lines = sorted(set(v_lines))
+            
+            return v_lines, h_lines
+        except Exception as e:
+            logger.error(f"Ошибка детекции таблицы: {e}")
+            return [], []
+    
+    def extract_text_with_table_awareness(self, img: Image.Image, vertical_lines: List, horizontal_lines: List) -> str:
+        """Извлекает текст с учетом структуры таблицы"""
+        try:
+            if not vertical_lines or not horizontal_lines:
+                # Если не удалось обнаружить таблицу, используем обычный OCR
+                return pytesseract.image_to_string(
+                    img, lang='rus+eng', 
+                    config='--oem 3 --psm 6 -c preserve_interword_spaces=1'
+                )
+            
+            img_array = np.array(img)
+            cells_text = []
+            
+            # Добавляем границы изображения
+            all_v_lines = [0] + vertical_lines + [img_array.shape[1]]
+            all_h_lines = [0] + horizontal_lines + [img_array.shape[0]]
+            
+            for i in range(len(all_h_lines) - 1):
+                row_text = []
+                for j in range(len(all_v_lines) - 1):
+                    # Вырезаем ячейку
+                    x1, x2 = all_v_lines[j], all_v_lines[j + 1]
+                    y1, y2 = all_h_lines[i], all_h_lines[i + 1]
+                    
+                    # Пропускаем слишком маленькие ячейки
+                    if (x2 - x1) < 10 or (y2 - y1) < 10:
+                        row_text.append("")
+                        continue
+                    
+                    cell_img = img_array[y1:y2, x1:x2]
+                    cell_pil = Image.fromarray(cell_img)
+                    
+                    # Улучшаем изображение ячейки
+                    enhanced_cell = self.enhance_image_for_technical_ocr(cell_pil)
+                    
+                    # OCR для ячейки
+                    text = pytesseract.image_to_string(
+                        enhanced_cell, lang='rus+eng', 
+                        config='--oem 3 --psm 6 -c preserve_interword_spaces=1'
+                    ).strip()
+                    
+                    row_text.append(text)
+                
+                # Объединяем текст строки
+                cells_text.append(" | ".join(row_text))
+            
+            return "\n".join(cells_text)
+        except Exception as e:
+            logger.error(f"Ошибка извлечения текста с таблицей: {e}")
+            # Fallback к обычному OCR
+            return pytesseract.image_to_string(img, lang='rus+eng')
+    
     def ocr_from_image(self, img: Image.Image) -> str:
-        """Распознает текст с изображения с помощью OCR"""
+        """Распознает текст с изображения с улучшенным OCR"""
         try:
             enhanced_img = self.enhance_image_for_technical_ocr(img)
             
-            # Специальные настройки для технических документов
-            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789-–—.,()№"/\\|× '
+            # Сначала пытаемся обнаружить таблицу
+            vertical_lines, horizontal_lines = self.detect_table_structure(enhanced_img)
             
-            text = pytesseract.image_to_string(enhanced_img, lang='rus+eng', config=custom_config)
+            if vertical_lines and horizontal_lines:
+                # Если найдена таблица, используем табличный подход
+                text = self.extract_text_with_table_awareness(enhanced_img, vertical_lines, horizontal_lines)
+            else:
+                # Обычный OCR для нетabular контента
+                custom_config = r'--oem 3 --psm 6 -c preserve_interword_spaces=1'
+                text = pytesseract.image_to_string(enhanced_img, lang='rus+eng', config=custom_config)
+            
             return text
             
         except Exception as e:
@@ -213,8 +362,27 @@ class PDFEquipmentBot:
             'оповещатель': 'Оповещатели',
             'кабель': 'Кабели и провода',
             'материал': 'Материалы',
-            'прочий': 'Прочие устройства'
+            'прочий': 'Прочие устройства',
+            'релейный': 'Релейные модули',
+            'изолятор': 'Изоляторы',
+            'агрегат': 'Агрегаты'
         }
+        
+        # Паттерны для поиска моделей/артикулов
+        model_patterns = [
+            r'([A-ZА-Я0-9][A-ZА-Я0-9\-–—\.\/\s]{3,}[A-ZА-Я0-9])',
+            r'(№?\s*[0-9\-–—\.\/]{3,}[A-ZА-Я]?[0-9]?)',
+            r'([A-Z]{2,}[\-\s]*[0-9]+[A-Z0-9\-]*)',
+            r'(Smart\s+[A-Z0-9\-]+)',
+            r'([A-Z]+-[A-Z]+-[A-Z0-9]+)',
+            r'(ВЗ–[А-Яа-яA-Z0-9\-]+)',
+            r'(ИП[-\s]*[0-9]+)',
+            r'(ОПОП[-\s]*[0-9]+)',
+            r'(РН[-\s]*[0-9]+)'
+        ]
+        
+        # Паттерн для поиска количества
+        quantity_pattern = r'(\d+)\s*(шт|м|кг|компл|уп|блок|лист|мм|см|м)?\.?\s*$'
         
         for line in lines:
             line = line.strip()
@@ -222,7 +390,7 @@ class PDFEquipmentBot:
                 continue
             
             # Пропускаем служебные строки
-            if any(x in line.lower() for x in ['страница', 'лист', 'дата', 'подпись']):
+            if any(x in line.lower() for x in ['страница', 'лист', 'дата', 'подпись', '=====']):
                 continue
             
             # Определяем разделы
@@ -234,19 +402,20 @@ class PDFEquipmentBot:
                     break
             
             # Пропускаем заголовки таблиц
-            if any(x in line_lower for x in ['наименован', 'техническ', 'характерист', 'тип', 'модель', 'код']):
+            if any(x in line_lower for x in ['наименован', 'техническ', 'характерист', 'тип', 'модель', 'код', 
+                                           'завод', 'ед', 'измерен', 'колич', 'место', 'примеч']):
                 in_table = True
                 continue
             
             # Парсим строки с оборудованием
-            if in_table and current_section:
-                equipment = self.parse_equipment_line(line, current_section)
+            if in_table and current_section and len(line) > 5:
+                equipment = self.parse_equipment_line(line, current_section, quantity_pattern, model_patterns)
                 if equipment:
                     equipment_data.append(equipment)
         
         return equipment_data
     
-    def parse_equipment_line(self, line: str, section: str) -> dict:
+    def parse_equipment_line(self, line: str, section: str, quantity_pattern: str, model_patterns: List[str]) -> dict:
         """Парсит строку с оборудованием для технических спецификаций"""
         line = re.sub(r'\s+', ' ', line.strip())
         
@@ -254,11 +423,11 @@ class PDFEquipmentBot:
             return None
         
         # Пропускаем служебные строки
-        if any(x in line.lower() for x in ['заказ', 'проект', 'смета', 'итого', 'всего']):
+        if any(x in line.lower() for x in ['заказ', 'проект', 'смета', 'итого', 'всего', '!!!']):
             return None
         
         # Ищем количество в конце строки
-        quantity_match = re.search(r'(\d+)\s*(шт|м|кг|компл|уп|блок|лист|мм|см|м)?\.?\s*$', line.lower())
+        quantity_match = re.search(quantity_pattern, line, re.IGNORECASE)
         if not quantity_match:
             return None
         
@@ -268,21 +437,13 @@ class PDFEquipmentBot:
         # Удаляем количество из строки
         line = line[:quantity_match.start()].strip()
         
-        # Ищем модель/артикул (типа R1-PHEX-X 201, №330° X/2.5 PS-R3 и т.д.)
-        model_patterns = [
-            r'([A-ZА-Я0-9][A-ZА-Я0-9\-–—\.\/\s]+[A-ZА-Я0-9])\s*$',
-            r'(№?\s*[0-9\-–—\.\/]+[A-ZА-Я]?[0-9]?)\s*$',
-            r'([A-Z]{2,}[\-\s]*[0-9]+[A-Z0-9\-]*)',
-            r'(Smart\s+[A-Z0-9\-]+)',
-            r'([A-Z]+-[A-Z]+-[A-Z0-9]+)'  # Для формата типа R1-PHEX-X
-        ]
-        
+        # Ищем модель/артикул
         model = ""
         for pattern in model_patterns:
             match = re.search(pattern, line)
             if match:
-                model = match.group(1).strip()
-                line = line[:match.start()].strip()
+                model = match.group(0).strip()
+                line = line.replace(model, '').strip()
                 break
         
         # Оставшаяся часть - название оборудования
@@ -327,14 +488,28 @@ class PDFEquipmentBot:
             
             await status_message.edit_text("🔧 Проверяю и восстанавливаю PDF...")
             
-            # Извлекаем текст через OCR изображений
-            text = self.extract_text_from_pdf_via_ocr(tmp_pdf_path)
+            # Сначала пытаемся извлечь текст напрямую
+            direct_text = ""
+            try:
+                doc = fitz.open(tmp_pdf_path)
+                for page in doc:
+                    direct_text += page.get_text("text") + "\n"
+                doc.close()
+            except:
+                direct_text = ""
+            
+            # Если прямого текста мало, используем OCR
+            if len(direct_text.strip()) < 100:
+                await status_message.edit_text("🔍 Распознаю текст через OCR...")
+                text = self.extract_text_from_pdf_via_ocr(tmp_pdf_path)
+            else:
+                text = direct_text
             
             if not text or len(text.strip()) < 100:
                 await status_message.edit_text("❌ Не удалось распознать текст из PDF.")
                 return
             
-            await status_message.edit_text("🔍 Анализирую технические спецификации...")
+            await status_message.edit_text("📊 Анализирую технические спецификации...")
             
             # Парсим данные оборудования
             equipment_data = self.parse_technical_specification(text)
@@ -429,6 +604,13 @@ if __name__ == "__main__":
     except:
         print("⚠️  mutool не установлен (опционально для восстановления PDF)")
         print("Установите: https://mupdf.com/downloads/index.html")
+    
+    # Проверяем наличие deskew
+    try:
+        import deskew
+        print("✅ deskew доступен для выравнивания изображений")
+    except:
+        print("⚠️  deskew не установлен (установите: pip install deskew)")
     
     bot = PDFEquipmentBot(BOT_TOKEN)
     bot.run()
