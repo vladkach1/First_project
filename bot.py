@@ -25,6 +25,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Настройка путей для macOS
+try:
+    # Автоматическое определение пути к Tesseract на macOS
+    tesseract_path = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
+    if tesseract_path.returncode == 0:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path.stdout.strip()
+        print(f"✅ Tesseract найден: {pytesseract.pytesseract.tesseract_cmd}")
+    else:
+        # Попробуем стандартные пути для macOS
+        possible_paths = [
+            '/usr/local/bin/tesseract',
+            '/opt/homebrew/bin/tesseract',
+            '/usr/bin/tesseract'
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                pytesseract.pytesseract.tesseract_cmd = path
+                print(f"✅ Tesseract найден: {path}")
+                break
+        else:
+            print("❌ Tesseract не найден")
+except Exception as e:
+    print(f"❌ Ошибка настройки Tesseract: {e}")
+
 class PDFEquipmentBot:
     def __init__(self, token: str):
         self.token = token
@@ -499,7 +523,7 @@ class PDFEquipmentBot:
                 direct_text = ""
             
             # Если прямого текста мало, используем OCR
-            if len(direct_text.strip()) < 100:
+            if len(direct_text.strip()) < 100000:
                 await status_message.edit_text("🔍 Распознаю текст через OCR...")
                 text = self.extract_text_from_pdf_via_ocr(tmp_pdf_path)
             else:
@@ -599,7 +623,7 @@ if __name__ == "__main__":
     
     # Проверяем наличие mutool
     try:
-        subprocess.run(['mutool', '--version'], capture_output=True, check=True)
+        subprocess.run(['mutool', '-v'], capture_output=True, check=True)
         print("✅ mutool доступен для восстановления PDF")
     except:
         print("⚠️  mutool не установлен (опционально для восстановления PDF)")
