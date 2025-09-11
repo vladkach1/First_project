@@ -13,6 +13,7 @@ import pytesseract
 # To remove the additional created files
 import os
 import re
+from PIL import Image
 
 # Установите путь к Tesseract OCR (если нужно)
 pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
@@ -132,7 +133,7 @@ def process_page_with_cid(pdf_path, page_num):
             image = images[0]
             temp_image_path = f'temp_page_{page_num}.png'
             image.save(temp_image_path, 'PNG')
-            
+
             # Извлекаем текст через OCR
             text = image_to_text(temp_image_path)
             
@@ -146,7 +147,7 @@ def process_page_with_cid(pdf_path, page_num):
         return ""
 
 # Find the PDF path
-pdf_path = '1.pdf'  # Замените на путь к вашему PDF файлу
+pdf_path = '1111.pdf'  # Замените на путь к вашему PDF файлу
 
 # Create a pdf file object
 pdfFileObj = open(pdf_path, 'rb')
@@ -246,6 +247,7 @@ for pagenum, page in enumerate(extract_pages(pdf_path)):
                     # Если содержит, обрабатываем этот элемент как изображение через OCR
                     crop_image(element, pageObj)
                     convert_to_images('cropped_image.pdf')
+                    
                     image_text = image_to_text('PDF_image.png')
                     
                     # Добавляем OCR текст вместо (cid:) текста
