@@ -1,41 +1,65 @@
-import pytesseract
 from pdf2image import convert_from_path
-from PIL import Image
+import fitz  # PyMuPDF
 import os
 
-# Установите путь к Tesseract OCR (если нужно)
-pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
-
-def pdf_to_text_ocr(pdf_path):
-    try:
-        # Конвертируем PDF в изображения
-        images = convert_from_path(pdf_path, dpi=300)
-        
-        text = ""
-        for i, image in enumerate(images):
-            # Сохраняем временное изображение
-            image_path = f"temp_page_{i}.png"
-            image.save(image_path, 'PNG')
-            
-            # OCR с русским языком
-            page_text = pytesseract.image_to_string(Image.open(image_path), lang='rus+eng')
-            text += f"\n=== Страница {i+1} ===\n{page_text}\n"
-            
-            # Удаляем временный файл
-            os.remove(image_path)
-        
-        return text
+def crop_pdf_to_table(input_path, output_path, crop_coords):
+    """
+    Обрезает каждую страницу PDF до указанной области и сохраняет результат.
     
-    except Exception as e:
-        return f"Ошибка: {str(e)}"
+    :param input_path: Путь к исходному PDF-файлу
+    :param output_path: Путь для сохранения обрезанного PDF
+    :param crop_coords: Кортеж (x0, y0, x1, y1) с координатами области для обрезки
+    """
+    # Открываем исходный PDF
+    doc = fitz.open(input_path)
+    
+    # Создаем новый PDF документ для обрезанных страниц
+    new_doc = fitz.open()
+    
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        
+        # Создаем новую страницу в целевом документе
+        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
+        
+        # Определяем область обрезки
+        crop_rect = fitz.Rect(crop_coords)
+        
+        # Копируем только обрезанную область со старой страницы на новую
+        new_page.show_pdf_page(
+            new_page.rect,
+            doc,
+            page_num,
+            clip=crop_rect
+        )
+    
+    # Сохраняем обрезанный PDF
+    new_doc.save(output_path)
+    new_doc.close()
+    doc.close()
 
 # Основной код
-if __name__ == "__main__":
-    pdf_path = '1.pdf'
-    text = pdf_to_text_ocr(pdf_path)
-    
-    # Вывод с правильной кодировкой
-    try:
-        print(text.encode('utf-8', errors='ignore').decode('utf-8'))
-    except:
-        print(text)
+pdf_path = 'qwer.pdf'  # Замените на путь к вашему PDF файлу
+cropped_pdf_path = 'test.pdf'  # Путь для сохранения обрезанного PDF
+crop_coords_name = (113, 15, 482, 37)
+#105 129
+#82 106
+#60 83
+#37 60
+#15 37
+#-24 от этого конца  +23.3 от прошлого конца
+#28 строк пока максимум
+#.  37 конец 1 стоки
+#.  
+
+# Обрезаем PDF
+crop_pdf_to_table(pdf_path, cropped_pdf_path, crop_coords_name)
+
+# Конвертируем ОБРЕЗАННЫЙ PDF в изображения
+images = convert_from_path(cropped_pdf_path)
+
+# Сохраняем изображения
+for i, image in enumerate(images):
+    image.save(f'page_{i}.png', 'PNG')
+
+print("Готово! Обрезанные изображения сохранены.")
