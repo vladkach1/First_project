@@ -12,93 +12,8 @@ from pdf2image import convert_from_path
 import pytesseract 
 # To remove the additional created files
 import os
-import re
-import fitz  # PyMuPDF
-import PIL.ImageFile
-
-PIL.Image.MAX_IMAGE_PIXELS = None  
-
-# Установите путь к Tesseract OCR (если нужно)
-pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
-
-
-def crop_pdf_to_table(input_path, output_path, crop_coords):
-    """
-    Обрезает каждую страницу PDF до указанной области и сохраняет результат.
-    
-    :param input_path: Путь к исходному PDF-файлу
-    :param output_path: Путь для сохранения обрезанного PDF
-    :param crop_coords: Кортеж (x0, y0, x1, y1) с координатами области для обрезки
-    """
-    # Открываем исходный PDF
-    doc = fitz.open(input_path)
-    
-    # Создаем новый PDF документ для обрезанных страниц
-    new_doc = fitz.open()
-    
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-    
-        
-        # Определяем область обрезки
-        crop_rect = fitz.Rect(crop_coords)
-        # Создать страницу размером с обрезанную область
-        crop_rect = fitz.Rect(crop_coords)
-        # Создаем новую страницу в целевом документе
-        new_page = new_doc.new_page(width=crop_rect.width, height=crop_rect.height)
-        
-        # Копируем только обрезанную область со старой страницы на новую
-        new_page.show_pdf_page(
-            new_page.rect,
-            doc,
-            page_num,
-            clip=crop_rect
-        )
-    
-    # Сохраняем обрезанный PDF
-    new_doc.save(output_path)
-    new_doc.close()
-    doc.close()
-
-def crop_pdf_to_table1(input_path, output_path, x0,x1,y1):
-    """
-    Обрезает каждую страницу PDF до указанной области и сохраняет результат.
-    
-    :param input_path: Путь к исходному PDF-файлу
-    :param output_path: Путь для сохранения обрезанного PDF
-    :param crop_coords: Кортеж (x0, y0, x1, y1) с координатами области для обрезки
-    """
-    y0=y1-24
-    crop_coords= (x0,y0,x1,y1)
-    # Открываем исходный PDF
-    doc = fitz.open(input_path)
-    
-    # Создаем новый PDF документ для обрезанных страниц
-    new_doc = fitz.open()
-    
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        
-        # Создаем новую страницу в целевом документе
-        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
-        
-        # Определяем область обрезки
-        crop_rect = fitz.Rect(crop_coords)
-        
-        # Копируем только обрезанную область со старой страницы на новую
-        new_page.show_pdf_page(
-            new_page.rect,
-            doc,
-            page_num,
-            clip=crop_rect
-        )
-    
-    # Сохраняем обрезанный PDF
-    new_doc.save(output_path)
-    new_doc.close()
-    doc.close()
-
 # Create function to extract text
+
 def text_extraction(element):
     # Extracting the text from the in line text element
     line_text = element.get_text()
@@ -120,8 +35,8 @@ def text_extraction(element):
     
     # Return a tuple with the text in each line along with its format
     return (line_text, format_per_line)
-
 # Extracting tables from the page
+
 def extract_table(pdf_path, page_num, table_num):
     # Open the pdf file
     pdf = pdfplumber.open(pdf_path)
@@ -169,7 +84,6 @@ def find_table_for_element(element, page ,tables):
         if tx0 <= x0 <= x1 <= tx1 and ty0 <= y0 <= y1 <= ty1:
             return i  # Return the index of the table
     return None  
-
 # Create a function to crop the image elements from PDFs
 def crop_image(element, pageObj):
     # Get the coordinates to crop the image from PDF
@@ -191,248 +105,120 @@ def convert_to_images(input_file,):
     output_file = 'PDF_image.png'
     image.save(output_file, 'PNG')
 
-# Create a function to read text from images with Russian language support
+# Create a function to read text from images
 def image_to_text(image_path):
     # Read the image
     img = Image.open(image_path)
-    # Extract the text from the image with Russian language
-    text = pytesseract.image_to_string(img, lang='rus+eng')  # Добавлена поддержка русского
+    # Extract the text from the image
+    text = pytesseract.image_to_string(img)
     return text
-
-# Функция для проверки наличия (cid:) символов в тексте
-def has_cid_chars(text):
-    return re.search(r'\(cid:\d+\)', text) is not None
-
-# Функция для обработки страницы с (cid:) символами через OCR
-def process_page_with_cid(pdf_path, page_num):
-    """Обрабатывает всю страницу через OCR если обнаружены (cid:) символы"""
-    try:
-        print(pdf_path)
-        # Конвертируем страницу в изображение
-        images = convert_from_path(pdf_path, dpi=500, first_page=page_num+1, last_page=page_num+1)
-        if images:
-            image = images[0]
-            temp_image_path = f'temp_page_{page_num}.png'
-            image.save(temp_image_path, 'PNG')
-
-            # Извлекаем текст через OCR
-            text = image_to_text(temp_image_path)
-            
-            # Удаляем временный файл
-            os.remove(temp_image_path)
-            
-            return text
-        return ""
-    except Exception as e:
-        print(f"Ошибка при обработке страницы {page_num} через OCR: {e}")
-        return ""
-
 # Find the PDF path
-pdf_path = 'qwer.pdf'  # Замените на путь к вашему PDF файлу
-crop_coords_name = (113, 15, 482, 670)
-crop_coords_articul = (482, 15, 650, 670)
-crop_coords_code = (650, 15, 753, 670)
-crop_coords_creater = (750, 15, 880, 670)
-crop_coords_unit = (875, 15, 940, 670)
-crop_coords_quantity = (935, 15, 990, 670)
+pdf_path = 'qwer.pdf'
 
-crop_list = [
-crop_coords_name,
-crop_coords_articul,
-crop_coords_code,
-crop_coords_creater,
-crop_coords_unit,
-crop_coords_quantity
-]
-output_list = [
-    "name.pdf",
-    "articul.pdf",
-    "code.pdf",
-    "creater.pdf",
-    "unit.pdf",
-    "quantity.pdf"
-]
-output_line_list = [
-    "1.pdf",
-    "2.pdf",
-    "3.pdf",
-    "4.pdf",
-    "5.pdf",
-    "6.pdf",
-    "7.pdf",
-    "8.pdf",
-    "9.pdf",
-    "10.pdf",
-    "11.pdf",
-    "12.pdf",
-    "13.pdf",
-    "14.pdf",
-    "15.pdf",
-    "16.pdf",
-    "17.pdf",
-    "18.pdf",
-    "19.pdf",
-    "20.pdf",
-    "21.pdf",
-    "22.pdf",
-    "23.pdf",
-    "24.pdf",
-    "25.pdf",
-    "26.pdf",
-    "27.pdf",
-    "28.pdf"
-]
 # Create a pdf file object
-for num,file1 in enumerate(output_list):
-    end=37.0
-    for j in range(len(output_line_list)):
-        crop_pdf_to_table1(pdf_path, output_line_list[j], crop_list[num][0],crop_list[num][2],end)
-        end+=23.1
-    for file in output_line_list:
-        pdfFileObj = open(file, 'rb')
+pdfFileObj = open(pdf_path, 'rb')
 # Create a pdf reader object
-        pdfReaded = PyPDF2.PdfReader(pdfFileObj)
-
+pdfReaded = PyPDF2.PdfReader(pdfFileObj)
 # Create the dictionary to extract text from each image
-        text_per_page = {}
+text_per_page = {}
 # Create a boolean variable for image detection
-        image_flag = False
-# Флаг для обнаружения (cid:) символов
-        cid_detected = False
+image_flag = False
 
 # We extract the pages from the PDF
-        for pagenum, page in enumerate(extract_pages(file)):
-    # Проверяем, есть ли на странице (cid:) символы через предварительный анализ
-            page_text_preview = extract_text(file, page_numbers=[pagenum])
-    
-            if has_cid_chars(page_text_preview):
-                print(f"Обнаружены (cid:) символы на странице {pagenum}, обрабатываем через OCR...")
-                cid_detected = True
-        # Обрабатываем всю страницу через OCR
-                ocr_text = process_page_with_cid(file, pagenum)
-        
-        # Создаем структуру данных аналогичную обычной обработке
-                page_content = [ocr_text]
-                page_text = [ocr_text]
-                line_format = ['ocr_text']
-                text_from_images = [ocr_text]
-                text_from_tables = []
-        
-        # Добавляем в словарь
-                dctkey = 'Page_'+str(pagenum)
-                text_per_page[dctkey] = [page_text, line_format, text_from_images, text_from_tables, page_content]
-                continue
-    
-    # Обычная обработка страницы если нет (cid:) символов
+for pagenum, page in enumerate(extract_pages(pdf_path)):
+
     # Initialize the variables needed for the text extraction from the page
-            pageObj = pdfReaded.pages[pagenum]
-            page_text = []
-            line_format = []
-            text_from_images = []
-            text_from_tables = []
-            page_content = []
+    pageObj = pdfReaded.pages[pagenum]
+    page_text = []
+    line_format = []
+    text_from_images = []
+    text_from_tables = []
+    page_content = []
     # Initialize the number of the examined tables
-            table_in_page= -1
+    table_in_page= -1
     # Open the pdf file
-            pdf = pdfplumber.open(file)
+    pdf = pdfplumber.open(pdf_path)
     # Find the examined page
-            page_tables = pdf.pages[pagenum]
+    page_tables = pdf.pages[pagenum]
     # Find the number of tables in the page
-            tables = page_tables.find_tables()
-            if len(tables)!=0:
-                table_in_page = 0
+    tables = page_tables.find_tables()
+    if len(tables)!=0:
+        table_in_page = 0
 
     # Extracting the tables of the page
-            for table_num in range(len(tables)):
+    for table_num in range(len(tables)):
         # Extract the information of the table
-                table = extract_table(file, pagenum, table_num)
+        table = extract_table(pdf_path, pagenum, table_num)
         # Convert the table information in structured string format
-                table_string = table_converter(table)
+        table_string = table_converter(table)
         # Append the table string into a list
-                text_from_tables.append(table_string)
+        text_from_tables.append(table_string)
 
     # Find all the elements
-            page_elements = [(element.y1, element) for element in page._objs]
+    page_elements = [(element.y1, element) for element in page._objs]
     # Sort all the element as they appear in the page 
-            page_elements.sort(key=lambda a: a[0], reverse=True)
+    page_elements.sort(key=lambda a: a[0], reverse=True)
+
 
     # Find the elements that composed a page
-            for i,component in enumerate(page_elements):
+    for i,component in enumerate(page_elements):
         # Extract the element of the page layout
-                element = component[1]
+        element = component[1]
 
         # Check the elements for tables
-                if table_in_page == -1:
-                    pass
-                else:
-                    if is_element_inside_any_table(element, page ,tables):
-                        table_found = find_table_for_element(element,page ,tables)
-                        if table_found == table_in_page and table_found != None:    
-                            page_content.append(text_from_tables[table_in_page])
-                            page_text.append('table')
-                            line_format.append('table')
-                            table_in_page+=1
+        if table_in_page == -1:
+            pass
+        else:
+            if is_element_inside_any_table(element, page ,tables):
+                table_found = find_table_for_element(element,page ,tables)
+                if table_found == table_in_page and table_found != None:    
+                    page_content.append(text_from_tables[table_in_page])
+                    page_text.append('table')
+                    line_format.append('table')
+                    table_in_page+=1
                 # Pass this iteration because the content of this element was extracted from the tables
-                        continue
+                continue
 
-                if not is_element_inside_any_table(element,page,tables):
+        if not is_element_inside_any_table(element,page,tables):
+
             # Check if the element is text element
-                    if isinstance(element, LTTextContainer):
+            if isinstance(element, LTTextContainer):
                 # Use the function to extract the text and format for each text element
-                        (line_text, format_per_line) = text_extraction(element)
-                
-                # Проверяем, содержит ли текст (cid:) символы
-                        if has_cid_chars(line_text):
-                    # Если содержит, обрабатываем этот элемент как изображение через OCR
-                            crop_image(element, pageObj)
-                            convert_to_images('cropped_image.pdf')
-                    
-                            image_text = image_to_text('PDF_image.png')
-                    
-                    # Добавляем OCR текст вместо (cid:) текста
-                            page_content.append(image_text)
-                            page_text.append(image_text)
-                            line_format.append('image_ocr')
-                            text_from_images.append(image_text)
-                            image_flag = True
-                        else:
-                    # Обычная обработка текста
-                            page_text.append(line_text)
-                            line_format.append(format_per_line)
-                            page_content.append(line_text)
+                (line_text, format_per_line) = text_extraction(element)
+                # Append the text of each line to the page text
+                page_text.append(line_text)
+                # Append the format for each line containing text
+                line_format.append(format_per_line)
+                page_content.append(line_text)
+
 
             # Check the elements for images
-                    if isinstance(element, LTFigure):
+            if isinstance(element, LTFigure):
                 # Crop the image from PDF
-                        crop_image(element, pageObj)
+                crop_image(element, pageObj)
                 # Convert the croped pdf to image
-                        convert_to_images('cropped_image.pdf')
-                # Extract the text from image with Russian support
-                        image_text = image_to_text('PDF_image.png')
-                        text_from_images.append(image_text)
-                        page_content.append(image_text)
+                convert_to_images('cropped_image.pdf')
+                # Extract the text from image
+                image_text = image_to_text('PDF_image.png')
+                text_from_images.append(image_text)
+                page_content.append(image_text)
                 # Add a placeholder in the text and format lists
-                        page_text.append('image')
-                        line_format.append('image')
+                page_text.append('image')
+                line_format.append('image')
                 # Update the flag for image detection
-                        image_flag = True
+                image_flag = True
+
 
     # Create the key of the dictionary
-            dctkey = 'Page_'+str(pagenum)
+    dctkey = 'Page_'+str(pagenum)
     # Add the list of list as value of the page key
-            text_per_page[dctkey]= [page_text, line_format, text_from_images,text_from_tables, page_content]
-
+    text_per_page[dctkey]= [page_text, line_format, text_from_images,text_from_tables, page_content]
 # Close the pdf file object
-        pdfFileObj.close()
-
+pdfFileObj.close()
 # Delete the additional files created if image is detected
-        if image_flag:
-            os.remove('cropped_image.pdf')
-            os.remove('PDF_image.png')
-
-# Display the content of the page with proper encoding
-        for page_key in text_per_page.keys():
-            result = ''.join([str(item) for item in text_per_page[page_key][4]])
-            print(f"=== {page_key} ===")
-            print(result.encode('utf-8', errors='ignore').decode('utf-8'))
-            print("\n" + "="*50 + "\n")
+if image_flag:
+    os.remove('cropped_image.pdf')
+    os.remove('PDF_image.png')
+# Display the content of the page
+result = ''.join(text_per_page['Page_0'][4])
+print(result)
