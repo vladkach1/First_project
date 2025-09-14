@@ -12,8 +12,17 @@ from telegram.ext import (
     filters, 
     ContextTypes
 )
+import PyPDF2
+import pdfplumber
+import pytesseract
+from pdf2image import convert_from_path
+from PIL import Image
+import re
+import os
+import fitz
+import io
 from config import BOT_TOKEN, MAX_FILE_SIZE
-from utils.pdf_to_img import convert_pdf_to_images
+from utils.pdf_to_img import crop_page_to_region,extract_text_from_region,analyze_pdf_region,print_region_results,export_region_to_file
 from utils.ocr_processing import extract_text_from_image
 from utils.text_analysis import parse_equipment_spec
 from utils.web_scraping import search_equipment_on_sites
@@ -51,98 +60,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик PDF файлов"""
     try:
+        pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
         # Проверка типа файла
-        #if not update.message.document.mime_type == 'application/pdf':
-        #    await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF.")
-        #    return
+        if not update.message.document.mime_type == 'application/pdf':
+            await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF.")
+            return
             
         # Проверка размера файла
-        #if update.message.document.file_size > MAX_FILE_SIZE:
-        #    await update.message.reply_text(f"❌ Размер файла превышает {MAX_FILE_SIZE // 1024 // 1024}MB. Пожалуйста, отправьте файл меньшего размера.")
-        #    return
+        if update.message.document.file_size > MAX_FILE_SIZE:
+            await update.message.reply_text(f"❌ Размер файла превышает {MAX_FILE_SIZE // 1024 // 1024}MB. Пожалуйста, отправьте файл меньшего размера.")
+            return
             
         # Создаем временную директорию
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Скачиваем файл
-            #pdf_file = await context.bot.get_file(update.message.document.file_id)
-            #pdf_path = os.path.join(tmp_dir, 'document.pdf')
-            #await pdf_file.download_to_drive(pdf_path)
-            
-            # Уведомление пользователя
-            #await update.message.reply_text("📥 Файл получен. Начинаю обработку...")
-            
-            # Этап 1: Конвертация PDF в изображения
-            #await update.message.reply_text("🔄 Конвертирую PDF в изображения...")
-            #img_paths = convert_pdf_to_images(pdf_path, tmp_dir)
-            
-            #if not img_paths:
-            #    await update.message.reply_text("❌ Не удалось конвертировать PDF. Пожалуйста, убедитесь, что файл не поврежден.")
-            #    return
-            
-            # Этап 2: OCR обработка
-            #await update.message.reply_text("🔍 Распознаю текст с изображений...")
-            #full_text = ""
-            #for img_path in img_paths:
-            #    text = extract_text_from_image(img_path)
-            #    full_text += text + "\n\n"
-            # Этап 3: Анализ текста
-            #await update.message.reply_text("📊 Анализирую спецификацию оборудования...")
-            #equipment_data = parse_equipment_spec(full_text)
-            
-            #if not equipment_data:
-            #    await update.message.reply_text("❌ Не удалось найти данные оборудования в документе. Убедитесь, что в PDF есть таблица со спецификацией.")
-            #    return
 
-            # НАЧАЛО НОВОГО ЭТАПА В НАШЕЙ ЖИЗНИ
-            
-            user_text = update.message.text
-            
-            lines = user_text.split('\n\n')
-
-            data=[]
-            z=[]
-
-            for i in lines:
-                z=[]
-                name=""
-                col=""
-                unit=""
-                q=i.split('\n')
-                for j in q:
-                    w = j.split(": ")
-                    if w[0]=="Наименование" or w[0]=="Марка/Модель" or w[0]=="Характеристика" or w[0]=="Техническая характеристика":
-                        name+=w[1]+" "
-                    elif w[0]=="Количество":
-                        col=w[1]
-                    elif w[0]=="Ед. измерения":
-                        unit=w[1]
-                    else:
-                        print("ошибкаКИРИЛЛ",w)
-                z.append(name)
-                z.append(col)
-                z.append(unit)
-                data.append(z)
-                print(data)
-
-            print(data)
-            item={}
-
-            equipment_data = []
-            for i,elem in enumerate(data,1):
-                if (len(elem)==3):
-                    if bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', elem[1])):
-                        item = {
-                                'name': elem[0],
-                                'quantity': float(elem[1]),
-                                'unit': elem[2]
-                            }
-                    else:
-                        await update.message.reply_text(f"❌ Некоректная строка №{i}")
-                        continue
-                else:
-                    await update.message.reply_text(f"❌ Некоректная строка №{i}")
-                    continue
-                equipment_data.append(item)
+            pdf_path = 'qwer.pdf'  # Замените на путь к вашему PDF
+    
+            if not os.path.exists(pdf_path):
+                print(f"Файл {pdf_path} не найден!")
+                return
+    
+        # Область для обработки: (x0, y0, x1, y1) в пунктах
+            crop_region = (113, 30, 995, 670)
+    
+            print("Начинаем анализ указанной области PDF...")
+            results = analyze_pdf_region(pdf_path, crop_region)
+    
+    # Вывод результатов в консоль
+            print_region_results(results)
+    
+    # Экспорт в файл
+            output_file = 'extracted_region_text.txt'
+            export_region_to_file(results, output_file)
+            print(f"\nРезультаты области сохранены в файл: {output_file}")
 
             # Этап 1: Поиск оборудования на сайтах (web_scraping)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
