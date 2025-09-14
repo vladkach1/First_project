@@ -93,6 +93,7 @@ def create_search_report(equipment_data, scraped_data):
                     'Цена': item['price'],
                     'Сайт': item['site'],
                     'Коффициент совпадения с запросом': coff[0],
+                    'Запрос': need_name,
                     'Колличество лишних слов в названии на сайте': coff[1],
                     'Статус': item['status']
                     })
@@ -111,6 +112,7 @@ def create_search_report(equipment_data, scraped_data):
                     'Цена': best_offer['Цена'],
                     'Сайт': best_offer['Сайт'],
                     'Коффициент совпадения с запросом': best_offer['Коффициент совпадения с запросом'],
+                    'Запрос': need_name,
                     'Колличество лишних слов в названии на сайте': best_offer['Колличество лишних слов в названии на сайте'],
                     'Статус': best_offer['Статус']
                     })

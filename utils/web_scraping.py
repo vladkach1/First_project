@@ -313,8 +313,9 @@ def scrape_etm(item_name):
                 continue
                 
             name = name1_elem.text.strip()+" "+name2_elem.text.strip()
-            if (price_elem.text.strip()!="По запросу") and (price_elem.text.strip()!="Свяжитесь с нами"):
-                price = float(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.'))
+            #ERROR:WebScraping:Ошибка парсинга etm: could not convert string to float: '27.95₽/м' ERROR:WebScraping:Ошибка парсинга etm: could not convert string to float: '266.24₽/упак' ERROR:WebScraping:Ошибка парсинга etm: could not convert string to float: '10111.97₽/уп'
+            if (price_elem.text.strip()!="По запросу") and (price_elem.text.strip()!="Свяжитесь с нами") and (price_elem.text.strip()!="н/д"):
+                price = float(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.').replace('₽/компл', '').replace('₽/м', '').replace('₽/упак', '').replace('₽/уп', ''))
             else:
                 price = 0
             stock = stock_elem.text.strip() #Выдаёт иногда На заказ
