@@ -57,10 +57,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await update.message.reply_text(welcome_message)
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик PDF файлов"""
     try:
         pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
+        document = update.message.document
+        file_id = document.file_id
+        file = await context.bot.get_file(file_id)
+        await file.download_to_drive("temp.pdf")
+            
+            
+        
         # Проверка типа файла
         if not update.message.document.mime_type == 'application/pdf':
             await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF.")
@@ -73,8 +80,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             
         # Создаем временную директорию
         with tempfile.TemporaryDirectory() as tmp_dir:
-
-            pdf_path = 'qwer.pdf'  # Замените на путь к вашему PDF
+            string_list=[]
+            pdf_path = "temp.pdf"  # Замените на путь к вашему PDF
     
             if not os.path.exists(pdf_path):
                 print(f"Файл {pdf_path} не найден!")
@@ -91,9 +98,30 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     
     # Экспорт в файл
             output_file = 'extracted_region_text.txt'
-            export_region_to_file(results, output_file)
+            string_list = export_region_to_file(results, output_file)
             print(f"\nРезультаты области сохранены в файл: {output_file}")
 
+            data=[]
+
+            for i in string_list:
+                data.append(i.rsplit(' ',2))
+
+
+            equipment_data = []
+            for i in data:
+                if (len(i)==3):
+                    if bool(re.fullmatch(r'\d+', i[2])):
+                        item = {
+                                'name': i[0],
+                                'quantity': float(i[2]),
+                                'unit': i[1]
+                            }
+                        equipment_data.append(item)
+                    else:
+                        print("неправильное количество ",i[2])
+                else:
+                    print("неправильное list ",i,len(i))
+            print(1)
             # Этап 1: Поиск оборудования на сайтах (web_scraping)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
             scraped_data = []
@@ -132,9 +160,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 document=InputFile(commercial_buffer, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
-            
             # Финализация
             await update.message.reply_text("🎉 Обработка завершена успешно! Если у вас есть еще файлы, отправьте их сейчас.")
+        os.unlink("temp.pdf")
     
     except Exception as e:
         logger.error(f"Ошибка обработки PDF: {e}")
@@ -151,7 +179,7 @@ def main():
         
         # Регистрируем обработчики
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(MessageHandler(filters.Text(), handle_text))
+        application.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
         application.add_error_handler(handle_error)
         
         # Запускаем бота
