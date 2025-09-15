@@ -22,7 +22,7 @@ import os
 import fitz
 import io
 from config import BOT_TOKEN, MAX_FILE_SIZE
-from utils.pdf_to_img import crop_page_to_region,extract_text_from_region,analyze_pdf_region,print_region_results,export_region_to_file
+from utils.pdf_to_img import crop_page_to_region,extract_text_from_region,analyze_pdf_region,print_region_results,export_region_to_file,parse_excel_to_structure
 from utils.ocr_processing import extract_text_from_image
 from utils.text_analysis import parse_equipment_spec
 from utils.web_scraping import search_equipment_on_sites
@@ -30,6 +30,16 @@ from utils.excel_generator import create_search_report, create_commercial_offer
 from error_handler import handle_error
 from cache import cache
 from config import BOT_TOKEN, MAX_FILE_SIZE, SEARCH_SITES
+import os
+import logging
+import asyncio
+import tempfile
+import pandas as pd
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+import re
+from openpyxl import load_workbook
+import json
 
 # Настройка логирования
 logging.basicConfig(
@@ -63,24 +73,11 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
         document = update.message.document
         file_id = document.file_id
+        file_name = document.file_name
         file = await context.bot.get_file(file_id)
-        await file.download_to_drive("temp.pdf")
-            
-            
-        
-        # Проверка типа файла
-        if not update.message.document.mime_type == 'application/pdf':
-            await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF.")
-            return
-            
-        # Проверка размера файла
-        if update.message.document.file_size > MAX_FILE_SIZE:
-            await update.message.reply_text(f"❌ Размер файла превышает {MAX_FILE_SIZE // 1024 // 1024}MB. Пожалуйста, отправьте файл меньшего размера.")
-            return
-            
-        # Создаем временную директорию
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            string_list=[]
+        string_list=[]
+        if update.message.document.mime_type == 'application/pdf':
+            await file.download_to_drive("temp.pdf")
             pdf_path = "temp.pdf"  # Замените на путь к вашему PDF
     
             if not os.path.exists(pdf_path):
@@ -99,18 +96,33 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Экспорт в файл
             output_file = 'extracted_region_text.txt'
             string_list = export_region_to_file(results, output_file)
-            print(f"\nРезультаты области сохранены в файл: {output_file}")
+        elif file_name and file_name.lower().endswith('.xlsx'):
+            await file.download_to_drive("temp.xlsx")
+            excel_path = "temp.xlsx"
+            # Загружаем Excel файл
+            data = parse_excel_to_structure(excel_path)
 
-            data=[]
+# Выводим результат
+            print("Структура данных:")
+            print(data)               
+        else:
+            await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF или XLSX.")
+            return
+            
+            
+        # Создаем временную директорию
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            
+            if update.message.document.mime_type == 'application/pdf':
+                data=[]
 
-            for i in string_list:
-                data.append(i.rsplit(' ',2))
-
+                for i in string_list:
+                    data.append(i.rsplit(' ',2))
 
             equipment_data = []
             for i in data:
                 if (len(i)==3):
-                    if bool(re.fullmatch(r'\d+', i[2])):
+                    if bool(re.fullmatch(r'\d+\.?\d*', i[2])):
                         item = {
                                 'name': i[0],
                                 'quantity': float(i[2]),
@@ -121,7 +133,6 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         print("неправильное количество ",i[2])
                 else:
                     print("неправильное list ",i,len(i))
-            print(1)
             # Этап 1: Поиск оборудования на сайтах (web_scraping)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
             scraped_data = []

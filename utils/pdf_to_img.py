@@ -7,6 +7,16 @@ import re
 import os
 import fitz
 import io
+import os
+import logging
+import asyncio
+import tempfile
+import pandas as pd
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+import re
+from openpyxl import load_workbook
+import json
 
 # Установите путь к Tesseract OCR
 pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
@@ -171,4 +181,41 @@ def export_region_to_file(results, output_file):
                 for i, line in enumerate(data['text_lines']):
                     result_list.append(f"{line}")
     return result_list
+import pandas as pd
+import numpy as np
 
+def parse_excel_to_structure(file_path):
+    """
+    Безопасный парсер без использования регулярных выражений
+    """
+    result = []
+    
+    excel_file = pd.ExcelFile(file_path)
+    
+    for sheet_name in excel_file.sheet_names:
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        
+        for index, row in df.iterrows():
+            # Пропускаем строки с недостаточными данными
+            if any(pd.isna(row.iloc[i]) for i in [1, 2, 3, 4]):
+                continue
+            
+            # Преобразуем все в строки
+            name = str(row.iloc[1]).strip()
+            model = str(row.iloc[2]).strip()
+            unit = str(row.iloc[3]).strip()
+            quantity = row.iloc[4]
+            
+            
+            # Также пропускаем строки с пустыми единицами измерения
+            if (unit not in ['', ' '] and 
+                not pd.isna(quantity) and
+                quantity != 0):
+                
+                try:
+                    quantity_num = float(quantity)
+                    result.append([str(str(name)+" "+str(model)), str(unit), str(quantity_num)])
+                except (ValueError, TypeError):
+                    continue
+    
+    return result
