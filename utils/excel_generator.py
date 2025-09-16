@@ -66,22 +66,27 @@ def create_search_report(equipment_data, scraped_data):
     :return: Объект Workbook Excel
     """
     try:
+        if not equipment_data or not scraped_data:
+            logger.warning("Пустые входные данные")
+            return
         logger.info("Создание отчета поиска оборудования")
-        
         report_data = [] #Список подходящих по наименованию
         result = [] #Список подходящих по наименованиям и самых дешёвых
-        
         # Создаем DataFrame
         #Выбираем самое дещёвое предложение
         for i, need_item in enumerate(equipment_data):
-
-
+            if i >= len(scraped_data):
+                logger.warning(f"Нет данных поиска для элемента {i}")
+                continue
             report_data.clear()
             need_name = need_item['name']
             need_quantity = need_item['quantity']
             need_unit = need_item['unit']
 
             coff_similarity = 0.0
+            if not scraped_data[i]:
+                logger.warning(f"Нет предложений для '{need_name}'")
+                continue
             for item in scraped_data[i]:
                 coff = similarity(need_name,item['name'])
                 if  coff[0] > coff_similarity:
@@ -98,7 +103,9 @@ def create_search_report(equipment_data, scraped_data):
                     'Статус': item['status']
                     })
                     coff_similarity = coff[0]
-
+            if not report_data:
+                logger.warning(f"Не найдено подходящих предложений для '{need_name}'")
+                continue
             report_data.sort(key=lambda x: x['Цена'], reverse=True)
             report_data.sort(key=lambda x: x['Колличество лишних слов в названии на сайте'])
             report_data.sort(key=lambda x: x['Коффициент совпадения с запросом'], reverse=True)
@@ -116,6 +123,9 @@ def create_search_report(equipment_data, scraped_data):
                     'Колличество лишних слов в названии на сайте': best_offer['Колличество лишних слов в названии на сайте'],
                     'Статус': best_offer['Статус']
                     })
+        if not result:
+            logger.warning("Не найдено ни одного подходящего предложения")
+            return
         df = pd.DataFrame(result)
 
         #Создаём книгу ексель
@@ -152,7 +162,7 @@ def create_search_report(equipment_data, scraped_data):
         logger.error(f"Ошибка создания отчета поиска: {e}")
         raise RuntimeError("Ошибка генерации отчета поиска.")
 
-def create_commercial_offer(equipment_data, scraped_data):
+def create_commercial_offer(equipment_data, scraped_data, name_data):
     """
     Создает коммерческое предложение в формате Excel
     
@@ -165,11 +175,21 @@ def create_commercial_offer(equipment_data, scraped_data):
         report_data = [] #Список подходящих по наименованию
         result = [] #Список подходящих по наименованиям и самых дешёвых
         total_sum=0
+        shift=0
         # Создаем DataFrame
         #Выбираем самое дещёвое предложение
         for i, need_item in enumerate(equipment_data):
-
-
+            print(name_data[i+shift],need_item['name'])
+            while name_data[i+shift]!=need_item['name']:
+                result.append({
+                    '№': i+1, 
+                    'Наименование': name_data[i+shift], 
+                    'Ед. изм.': "", 
+                    'Кол-во': "", 
+                    'Цена за ед.': "", 
+                    'Сумма, руб.': ""
+                    })
+                shift+=1
             report_data.clear()
             need_name = need_item['name']
             need_quantity = need_item['quantity']

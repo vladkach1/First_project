@@ -28,6 +28,7 @@ def setup_driver():
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(REQUEST_TIMEOUT)
+    driver.implicitly_wait(10)
     return driver
 
 def scrape_tinko(item_name):
@@ -315,7 +316,7 @@ def scrape_etm(item_name):
             name = name1_elem.text.strip()+" "+name2_elem.text.strip()
             #ERROR:WebScraping:Ошибка парсинга etm: could not convert string to float: '27.95₽/м' ERROR:WebScraping:Ошибка парсинга etm: could not convert string to float: '266.24₽/упак' ERROR:WebScraping:Ошибка парсинга etm: could not convert string to float: '10111.97₽/уп'
             if (price_elem.text.strip()!="По запросу") and (price_elem.text.strip()!="Свяжитесь с нами") and (price_elem.text.strip()!="н/д"):
-                price = float(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.').replace('₽/компл', '').replace('₽/м', '').replace('₽/упак', '').replace('₽/уп', ''))
+                price = float(price_elem.text.replace(' ', '').replace('₽/шт', '').replace(',', '.').replace('₽/компл', '').replace('₽/м', '').replace('₽/упак', '').replace('₽/уп', '').replace('₽/рул', ''))
             else:
                 price = 0
             stock = stock_elem.text.strip() #Выдаёт иногда На заказ

@@ -113,7 +113,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_name = document.file_name
         file = await context.bot.get_file(file_id)
         string_list=[]
-        
+
         # Отправляем сообщение о начале обработки
         await update.message.reply_text("🔄 Начинаю обработку файла...")
         
@@ -137,18 +137,20 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Экспорт в файл
             output_file = 'extracted_region_text.txt'
             string_list = export_region_to_file(results, output_file)
-            
         elif file_name and file_name.lower().endswith('.xlsx'):
             await file.download_to_drive("temp.xlsx")
-            excel_path = "temp.xlsx"
+            pdf_path = "temp.xlsx"
             await update.message.reply_text("📊 Анализирую Excel файл...")
             # Загружаем Excel файл
-            data = parse_excel_to_structure(excel_path)
+            data = parse_excel_to_structure(pdf_path)
+
+        # Выводим результат
             print("Структура данных:")
-            print(data)
+            print(data)               
         else:
             await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF или XLSX.")
             return
+            
             
         # Создаем временную директорию
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -160,23 +162,23 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     data.append(i.rsplit(' ',2))
 
             equipment_data = []
+            name_data = []
             for i in data:
-                if (len(i)==3):
+                if (len(i)==1):
+                    name_data.append(i[0])
+                elif (len(i)==3):
                     if bool(re.fullmatch(r'\d+\.?\d*', i[2])):
                         item = {
                                 'name': i[0],
                                 'quantity': float(i[2]),
                                 'unit': i[1]
                             }
+                        name_data.append(i[0])
                         equipment_data.append(item)
                     else:
                         print("неправильное количество ",i[2])
                 else:
                     print("неправильное list ",i,len(i))
-                    
-            # Показываем сколько позиций найдено
-            await update.message.reply_text(f"✅ Найдено {len(equipment_data)} позиций оборудования")
-            
             # Этап 1: Поиск оборудования на сайтах (web_scraping)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
             scraped_data = []
@@ -190,8 +192,8 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Отчет 1: Результаты поиска
             search_report = create_search_report(equipment_data, scraped_data)
             report_buffer = io.BytesIO()
-            search_report.save(report_buffer)
-            report_buffer.seek(0)
+            search_report.save(report_buffer)  # Сохраняем в буфер
+            report_buffer.seek(0)  # Перемещаем указатель в начало
         
             await update.message.reply_document(
                 document=InputFile(report_buffer, filename='search_report.xlsx'),
@@ -206,16 +208,15 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Отчет 2: Коммерческое предложение
             await update.message.reply_text("💼 Формирую коммерческое предложение...")
-            commercial_report = create_commercial_offer(equipment_data, scraped_data)
+            commercial_report = create_commercial_offer(equipment_data, scraped_data,name_data)
             commercial_buffer = io.BytesIO()
-            commercial_report.save(commercial_buffer)
-            commercial_buffer.seek(0)
+            commercial_report.save(commercial_buffer)  # Сохраняем в буфер
+            commercial_buffer.seek(0)  # Перемещаем указатель в начало
         
             await update.message.reply_document(
                 document=InputFile(commercial_buffer, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
-            
             # Финализация
             await update.message.reply_text(
                 "🎉 Обработка завершена успешно!\n\n"
@@ -257,11 +258,12 @@ def main():
         # Запускаем бота
         logger.info("Бот запущен и ожидает сообщений...")
         
-        # Запускаем polling
+        # Запускаем polling в отдельном event loop
         application.run_polling()
         
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}")
+        # Принудительный выход при критической ошибке
         os._exit(1)
 
 if __name__ == '__main__':

@@ -197,25 +197,32 @@ def parse_excel_to_structure(file_path):
         
         for index, row in df.iterrows():
             # Пропускаем строки с недостаточными данными
-            if any(pd.isna(row.iloc[i]) for i in [1, 2, 3, 4]):
+            if any(pd.isna(row.iloc[i]) for i in [1]):
                 continue
             
             # Преобразуем все в строки
-            name = str(row.iloc[1]).strip()
-            model = str(row.iloc[2]).strip()
-            unit = str(row.iloc[3]).strip()
-            quantity = row.iloc[4]
-            
-            
-            # Также пропускаем строки с пустыми единицами измерения
-            if (unit not in ['', ' '] and 
+            if not (any(pd.isna(row.iloc[i]) for i in [1, 5, 6])):
+                name = str(row.iloc[1]).strip()
+                model = str(row.iloc[2]).strip()
+                code = str(row.iloc[3]).strip()
+                unit = str(row.iloc[5]).strip() #5
+                quantity = row.iloc[6] #6
+                if (unit not in ['', ' '] and 
                 not pd.isna(quantity) and
                 quantity != 0):
                 
-                try:
-                    quantity_num = float(quantity)
-                    result.append([str(str(name)+" "+str(model)), str(unit), str(quantity_num)])
-                except (ValueError, TypeError):
-                    continue
+                    try:
+                        quantity_num = float(quantity)
+                        result.append([str(str(name)+" "+str(model)+" "+str(code)), str(unit), str(quantity_num)])
+                    except (ValueError, TypeError):
+                        continue
+            else:
+                name = str(row.iloc[1]).strip()
+                result.append([str(name)])
+
+            
+            
+            # Также пропускаем строки с пустыми единицами измерения
+            
     
     return result
