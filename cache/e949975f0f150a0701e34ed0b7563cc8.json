@@ -1,0 +1,26 @@
+{
+  "timestamp": 1758023352.852428,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Программное обеспечение Сервер Орион Про",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%A6%D0%B5%D0%BD%D1%82%D1%80%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B8+c%D0%B5%D1%80%D0%B2%D0%B5%D1%80+%D0%9E%D1%80%D0%B8%D0%BE%D0%BD+%D0%9F%D1%80%D0%BE+nan"
+    },
+    {
+      "site": "luis",
+      "name": "Комплект программного обеспечения ОРИОН Про",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%A6%D0%B5%D0%BD%D1%82%D1%80%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B8+c%D0%B5%D1%80%D0%B2%D0%B5%D1%80+%D0%9E%D1%80%D0%B8%D0%BE%D0%BD+%D0%9F%D1%80%D0%BE+nan"
+    },
+    {
+      "site": "luis",
+      "name": "Программное обеспечение OPC Сервер Орион Про",
+      "price": 15802.18,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%A6%D0%B5%D0%BD%D1%82%D1%80%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B8+c%D0%B5%D1%80%D0%B2%D0%B5%D1%80+%D0%9E%D1%80%D0%B8%D0%BE%D0%BD+%D0%9F%D1%80%D0%BE+nan"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "timestamp": 1758022949.714835,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Адаптер USB-N10 NANO",
+      "price": 929.61,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9A%D0%BB%D1%8E%D1%87-%D1%87%D0%B8%D0%BF+nan"
+    },
+    {
+      "site": "luis",
+      "name": "Адаптер USB-AC53 NANO",
+      "price": 1929.09,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9A%D0%BB%D1%8E%D1%87-%D1%87%D0%B8%D0%BF+nan"
+    },
+    {
+      "site": "luis",
+      "name": "Память оперативная M3ST-2GNJCD0E-J",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%9A%D0%BB%D1%8E%D1%87-%D1%87%D0%B8%D0%BF+nan"
+    }
+  ]
+}

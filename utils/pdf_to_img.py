@@ -201,19 +201,19 @@ def parse_excel_to_structure(file_path):
                 continue
             
             # Преобразуем все в строки
-            if not (any(pd.isna(row.iloc[i]) for i in [1, 5, 6])):
+            if not (any(pd.isna(row.iloc[i]) for i in [1, 3, 4])):
                 name = str(row.iloc[1]).strip()
                 model = str(row.iloc[2]).strip()
-                code = str(row.iloc[3]).strip()
-                unit = str(row.iloc[5]).strip() #5
-                quantity = row.iloc[6] #6
+                #code = str(row.iloc[3]).strip()
+                unit = str(row.iloc[3]).strip() #5
+                quantity = row.iloc[4] #6
                 if (unit not in ['', ' '] and 
                 not pd.isna(quantity) and
                 quantity != 0):
                 
                     try:
                         quantity_num = float(quantity)
-                        result.append([str(str(name)+" "+str(model)+" "+str(code)), str(unit), str(quantity_num)])
+                        result.append([str(str(name)+" "+str(model)), str(unit), str(quantity_num)]) #+" "+str(code)
                     except (ValueError, TypeError):
                         continue
             else:

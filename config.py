@@ -21,7 +21,7 @@ OCR_LANGUAGE = 'rus+eng'
 SEARCH_SITES = [
     "https://www.luis.ru",
     "https://www.tinko.ru",
-    "https://www.layta.ru",
+    #"https://www.layta.ru",
     "https://www.etm.ru"
 ]
 MAX_THREADS = 10

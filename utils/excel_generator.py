@@ -82,18 +82,28 @@ def create_search_report(equipment_data, scraped_data):
             need_name = need_item['name']
             need_quantity = need_item['quantity']
             need_unit = need_item['unit']
+            count=1
 
             coff_similarity = 0.0
             if not scraped_data[i]:
                 logger.warning(f"Нет предложений для '{need_name}'")
                 continue
             for item in scraped_data[i]:
+                print(need_item['unit'][:-1])
+                escaped_unit = re.escape(need_item['unit'][:-1])
+
+                pattern = rf'\((\d+)\s*{escaped_unit}\)'
+                match = re.search(pattern, item['name'])
+
+                if match:
+                    count = int(match.group(1))
+                    print(count)
                 coff = similarity(need_name,item['name'])
                 if  coff[0] > coff_similarity:
                     report_data.append({
                     '№': i+1,
                     'Наименование': item['name'],
-                    'Количество': need_quantity,
+                    'Количество': need_quantity/count,
                     'Ед. изм.': need_unit, 
                     'Цена': item['price'],
                     'Сайт': item['site'],
@@ -114,7 +124,7 @@ def create_search_report(equipment_data, scraped_data):
             result.append({
                     '№': i+1,
                     'Наименование': best_offer['Наименование'],
-                    'Количество': need_quantity,
+                    'Количество': best_offer['Количество'],
                     'Ед. изм.': need_unit, 
                     'Цена': best_offer['Цена'],
                     'Сайт': best_offer['Сайт'],
@@ -194,15 +204,24 @@ def create_commercial_offer(equipment_data, scraped_data, name_data):
             need_name = need_item['name']
             need_quantity = need_item['quantity']
             need_unit = need_item['unit']
-
+            count=1
             coff_similarity = 0.0
             for item in scraped_data[i]:
+                print(need_item['unit'][:-1])
+                escaped_unit = re.escape(need_item['unit'][:-1])
+
+                pattern = rf'\((\d+)\s*{escaped_unit}\)'
+                match = re.search(pattern, item['name'])
+
+                if match:
+                    count = int(match.group(1))
+                    print(count)
                 coff = similarity(need_name,item['name'])
                 if  coff[0] > coff_similarity:
                     report_data.append({
                     '№': i+1,
                     'Наименование': item['name'],
-                    'Кол-во': need_quantity,
+                    'Кол-во': need_quantity/count,
                     'Ед. изм.': need_unit, 
                     'Цена за ед.': item['price'],
                     'Сайт': item['site'],
@@ -221,11 +240,11 @@ def create_commercial_offer(equipment_data, scraped_data, name_data):
                     '№': i+1, 
                     'Наименование': best_offer['Наименование'], 
                     'Ед. изм.': need_unit, 
-                    'Кол-во': need_quantity, 
+                    'Кол-во': best_offer['Кол-во'], 
                     'Цена за ед.': best_offer['Цена за ед.'], 
-                    'Сумма, руб.': best_offer['Цена за ед.']*need_quantity
+                    'Сумма, руб.': best_offer['Цена за ед.']*best_offer['Кол-во']
                     })
-            total_sum += best_offer['Цена за ед.']*need_quantity
+            total_sum += best_offer['Цена за ед.']*best_offer['Кол-во']
         df = pd.DataFrame(result)
 
         #Создаём книгу ексель

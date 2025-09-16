@@ -1,0 +1,26 @@
+{
+  "timestamp": 1758022484.6839108,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Кабель силовой КВВГнг(А)-LSLTx 4х1.5",
+      "price": 114.56,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=4%D1%851,5+%D0%BC%D0%BC2+%D0%9A%D0%92%D0%92%D0%93%D0%BD%D0%B3(%D0%90)-LSLTx"
+    },
+    {
+      "site": "luis",
+      "name": "Кабель силовой КВВГнг(А)-LSLTx 4х1.5",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=4%D1%851,5+%D0%BC%D0%BC2+%D0%9A%D0%92%D0%92%D0%93%D0%BD%D0%B3(%D0%90)-LSLTx"
+    },
+    {
+      "site": "luis",
+      "name": "Кабель силовой КВВГнг(А)-LSLTх 4х1.5",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=4%D1%851,5+%D0%BC%D0%BC2+%D0%9A%D0%92%D0%92%D0%93%D0%BD%D0%B3(%D0%90)-LSLTx"
+    }
+  ]
+}

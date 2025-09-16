@@ -1,0 +1,26 @@
+{
+  "timestamp": 1758022933.693061,
+  "content": [
+    {
+      "site": "etm",
+      "name": "Блок обратного вызова ЦИФРАЛ БК-02",
+      "price": 2823.47,
+      "status": "Сегодня\n2 шт.",
+      "url": "https://www.etm.ru/catalog?searchValue=%D0%91%D0%BB%D0%BE%D0%BA%20%D0%BA%D0%BE%D0%BD%D1%81%D1%8C%D0%B5%D1%80%D0%B6%D0%B0%20%D0%A6%D0%B8%D1%84%D1%80%D0%B0%D0%BB-%D0%91%D0%9A-04"
+    },
+    {
+      "site": "etm",
+      "name": "Блок управления пульта консьержа VIZIT-TU412M1",
+      "price": 6080.18,
+      "status": "C 25.09.25\n5 шт.",
+      "url": "https://www.etm.ru/catalog?searchValue=%D0%91%D0%BB%D0%BE%D0%BA%20%D0%BA%D0%BE%D0%BD%D1%81%D1%8C%D0%B5%D1%80%D0%B6%D0%B0%20%D0%A6%D0%B8%D1%84%D1%80%D0%B0%D0%BB-%D0%91%D0%9A-04"
+    },
+    {
+      "site": "etm",
+      "name": "Блок коммутации пульта консьержа БК-А418",
+      "price": 5059.18,
+      "status": "На заказ",
+      "url": "https://www.etm.ru/catalog?searchValue=%D0%91%D0%BB%D0%BE%D0%BA%20%D0%BA%D0%BE%D0%BD%D1%81%D1%8C%D0%B5%D1%80%D0%B6%D0%B0%20%D0%A6%D0%B8%D1%84%D1%80%D0%B0%D0%BB-%D0%91%D0%9A-04"
+    }
+  ]
+}

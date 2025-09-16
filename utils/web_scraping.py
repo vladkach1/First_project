@@ -349,7 +349,7 @@ def scrape_etm(item_name):
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
-    "https://www.layta.ru": scrape_layta,
+    #"https://www.layta.ru": scrape_layta,
     "https://www.etm.ru": scrape_etm
 }
 

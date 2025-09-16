@@ -1,0 +1,26 @@
+{
+  "timestamp": 1758023235.4706209,
+  "content": [
+    {
+      "site": "luis",
+      "name": "Считыватель Proxy-2A исп.01",
+      "price": 3712.8,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%A1%D1%87%D0%B8%D1%82%D1%8B%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D1%8C+%D0%B1%D0%B5c%D0%BA%D0%BE%D0%BD%D1%82%D0%B0%D0%BA%D1%82%D0%BD%D1%8B%D0%B8+Pro%D1%85y-2A+uc%D0%BF+01"
+    },
+    {
+      "site": "luis",
+      "name": "Считыватель RR-M исп. 01",
+      "price": 0,
+      "status": "Под заказ",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%A1%D1%87%D0%B8%D1%82%D1%8B%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D1%8C+%D0%B1%D0%B5c%D0%BA%D0%BE%D0%BD%D1%82%D0%B0%D0%BA%D1%82%D0%BD%D1%8B%D0%B8+Pro%D1%85y-2A+uc%D0%BF+01"
+    },
+    {
+      "site": "luis",
+      "name": "Считыватель Считыватель-2/01",
+      "price": 780.0,
+      "status": "В наличии",
+      "url": "https://luis.ru/catalog/search?searchString=%D0%A1%D1%87%D0%B8%D1%82%D1%8B%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D1%8C+%D0%B1%D0%B5c%D0%BA%D0%BE%D0%BD%D1%82%D0%B0%D0%BA%D1%82%D0%BD%D1%8B%D0%B8+Pro%D1%85y-2A+uc%D0%BF+01"
+    }
+  ]
+}
