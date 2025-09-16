@@ -7,11 +7,13 @@ import io
 from telegram import Update, InputFile
 from telegram.ext import (
     Application,
-    CommandHandler, 
-    MessageHandler, 
-    filters, 
-    ContextTypes
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    CallbackQueryHandler
 )
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import PyPDF2
 import pdfplumber
 import pytesseract
@@ -49,23 +51,58 @@ logging.basicConfig(
 logger = logging.getLogger("TelegramBot")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команды /start"""
+    """Обработчик команды /start с инлайн-кнопкой"""
     user = update.effective_user
+    
+    # Создаем инлайн-клавиатуру
+    keyboard = [
+        [InlineKeyboardButton("📖 Инструкция", callback_data='instruction')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     welcome_message = (
         f"Привет, {user.first_name}! 👋\n\n"
-        "Я бот для анализа спецификаций оборудования. Просто отправь мне список оборудования, который будет выглядеть следующим образом: наименовиние(кабель; датчик), колличество(1, 2, 3), единица измерения(шт; см; м; л) "
-        "и я выполню следующие действия:\n\n"
-        "1. Проанализирую ваш список \n"
-        "2. Проанализирую спецификацию оборудования\n"
-        "3. Найду лучшие цены на сайтах поставщиков\n"
-        "4. Предоставлю отчет и коммерческое предложение основанное на отчете\n\n"
-        "Отправь мне Список, подобный нижнему, чтобы начать!\n\n"
-        "Кабель 305 м\n"
-        "Тросс 4 мм\n"                                                                              
-        "Видеокамера 2 шт\n\n"
-        "И так далее по списку, каждое наименование с новой строки, соблюдайте обязательно все пробелы, как указано в примере!"
+        "Я бот для анализа спецификаций оборудования. Просто отправь мне PDF или Excel файл со списком оборудования, и я:\n\n"
+        "• Проанализирую спецификацию 📋\n"
+        "• Найду лучшие цены на сайтах поставщиков 🌐\n"
+        "• Предоставлю отчет и коммерческое предложение 📊\n\n"
+        "Формат данных в файле должен быть:\n"
+        "• Кабель 305 м\n"
+        "• Тросс 4 мм\n"
+        "• Видеокамера 2 шт\n\n"
+        "Каждое наименование с новой строки!\n\n"
+        "Нажми кнопку 'Инструкция' для подробного руководства 👇"
     )
-    await update.message.reply_text(welcome_message)
+    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик нажатий на инлайн-кнопки"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == 'instruction':
+        instruction_text = (
+            "📖 ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ БОТА\n\n"
+            "1. 📄 ПОДГОТОВЬТЕ ФАЙЛ\n"
+            "   • Формат: PDF или Excel (.xlsx)\n"
+            "   • Данные должны быть в формате: 'Наименование Количество Единица'\n"
+            "   • Пример: 'Кабель 305 м', 'Видеокамера 2 шт'\n\n"
+            "2. 📤 ОТПРАВЬТЕ ФАЙЛ БОТУ\n"
+            "   • Просто перетащите файл в чат или используйте скрепку\n"
+            "   • Максимальный размер: 20MB\n\n"
+            "3. ⏳ ДОЖДИТЕСЬ ОБРАБОТКИ\n"
+            "   • Бот проанализирует файл (1-2 минуты)\n"
+            "   • Выполнит поиск на сайтах поставщиков\n"
+            "   • Сгенерирует отчеты\n\n"
+            "4. 📥 ПОЛУЧИТЕ РЕЗУЛЬТАТЫ\n"
+            "   • Search Report.xlsx - детальные результаты поиска\n"
+            "   • Commercial Offer.xlsx - готовое коммерческое предложение\n\n"
+            "❓ ЕСЛИ ВОЗНИКЛИ ПРОБЛЕМЫ:\n"
+            "   • Проверьте формат данных в файле\n"
+            "   • Убедитесь, что файл не поврежден\n"
+            "   • Обратитесь к администраторам: @vlad_pash или @shishqo"
+        )
+        await query.edit_message_text(instruction_text)
 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик PDF файлов"""
@@ -76,39 +113,42 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_name = document.file_name
         file = await context.bot.get_file(file_id)
         string_list=[]
+        
+        # Отправляем сообщение о начале обработки
+        await update.message.reply_text("🔄 Начинаю обработку файла...")
+        
         if update.message.document.mime_type == 'application/pdf':
             await file.download_to_drive("temp.pdf")
-            pdf_path = "temp.pdf"  # Замените на путь к вашему PDF
+            pdf_path = "temp.pdf"
     
             if not os.path.exists(pdf_path):
-                print(f"Файл {pdf_path} не найден!")
+                await update.message.reply_text("❌ Файл не найден после загрузки!")
                 return
     
-        # Область для обработки: (x0, y0, x1, y1) в пунктах
+            # Область для обработки: (x0, y0, x1, y1) в пунктах
             crop_region = (113, 30, 995, 670)
     
-            print("Начинаем анализ указанной области PDF...")
+            await update.message.reply_text("📄 Анализирую PDF файл...")
             results = analyze_pdf_region(pdf_path, crop_region)
     
-    # Вывод результатов в консоль
+            # Вывод результатов в консоль
             print_region_results(results)
     
-    # Экспорт в файл
+            # Экспорт в файл
             output_file = 'extracted_region_text.txt'
             string_list = export_region_to_file(results, output_file)
+            
         elif file_name and file_name.lower().endswith('.xlsx'):
             await file.download_to_drive("temp.xlsx")
             excel_path = "temp.xlsx"
+            await update.message.reply_text("📊 Анализирую Excel файл...")
             # Загружаем Excel файл
             data = parse_excel_to_structure(excel_path)
-
-# Выводим результат
             print("Структура данных:")
-            print(data)               
+            print(data)
         else:
             await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF или XLSX.")
             return
-            
             
         # Создаем временную директорию
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -133,6 +173,10 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         print("неправильное количество ",i[2])
                 else:
                     print("неправильное list ",i,len(i))
+                    
+            # Показываем сколько позиций найдено
+            await update.message.reply_text(f"✅ Найдено {len(equipment_data)} позиций оборудования")
+            
             # Этап 1: Поиск оборудования на сайтах (web_scraping)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
             scraped_data = []
@@ -146,16 +190,16 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Отчет 1: Результаты поиска
             search_report = create_search_report(equipment_data, scraped_data)
             report_buffer = io.BytesIO()
-            search_report.save(report_buffer)  # Сохраняем в буфер
-            report_buffer.seek(0)  # Перемещаем указатель в начало
+            search_report.save(report_buffer)
+            report_buffer.seek(0)
         
             await update.message.reply_document(
                 document=InputFile(report_buffer, filename='search_report.xlsx'),
                 caption="✅ Результаты поиска оборудования\n\n"
                     "Цветовая маркировка статусов:\n"
                     "🟢 Зеленый - полностью доступно\n"
-                    "🔵 Синий - требуется запрос\n"
-                    "🟠 Оранжевый - мало остаток\n"
+                    "🔵 Синий - требуется запрос на покупку\n"
+                    "🟠 Оранжевый - мало по наличию\n"
                     "🔴 Красный - недоступно\n"
                     "🟡 Желтый - санкционное оборудование"
             )
@@ -164,20 +208,36 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("💼 Формирую коммерческое предложение...")
             commercial_report = create_commercial_offer(equipment_data, scraped_data)
             commercial_buffer = io.BytesIO()
-            commercial_report.save(commercial_buffer)  # Сохраняем в буфер
-            commercial_buffer.seek(0)  # Перемещаем указатель в начало
+            commercial_report.save(commercial_buffer)
+            commercial_buffer.seek(0)
         
             await update.message.reply_document(
                 document=InputFile(commercial_buffer, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
+            
             # Финализация
-            await update.message.reply_text("🎉 Обработка завершена успешно! Если у вас есть еще файлы, отправьте их сейчас.")
-        os.unlink("temp.pdf")
+            await update.message.reply_text(
+                "🎉 Обработка завершена успешно!\n\n"
+                "Если у вас есть еще файлы, отправьте их сейчас.\n\n"
+                "❓ Нужна помощь? Обращайтесь к администраторам: @vlad_pash или @shishqo"
+            )
+            
+        # Очистка временных файлов
+        if os.path.exists("temp.pdf"):
+            os.unlink("temp.pdf")
+        if os.path.exists("temp.xlsx"):
+            os.unlink("temp.xlsx")
     
     except Exception as e:
-        logger.error(f"Ошибка обработки PDF: {e}")
-        await update.message.reply_text("❌ Произошла ошибка при обработке вашего файла. Пожалуйста, попробуйте позже или обратитесь к администратору.")
+        logger.error(f"Ошибка обработки файла: {e}")
+        await update.message.reply_text(
+            "❌ Произошла ошибка при обработке вашего файла.\n\n"
+            "Пожалуйста:\n"
+            "1. Проверьте формат файла\n"
+            "2. Убедитесь, что данные соответствуют примеру\n"
+            "3. Попробуйте позже или обратитесь к администраторам: @vlad_pash или @shishqo"
+        )
 
 def main():
     """Основная функция запуска бота"""
@@ -190,18 +250,18 @@ def main():
         
         # Регистрируем обработчики
         application.add_handler(CommandHandler("start", start))
+        application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
         application.add_error_handler(handle_error)
         
         # Запускаем бота
         logger.info("Бот запущен и ожидает сообщений...")
         
-        # Запускаем polling в отдельном event loop
+        # Запускаем polling
         application.run_polling()
         
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}")
-        # Принудительный выход при критической ошибке
         os._exit(1)
 
 if __name__ == '__main__':
