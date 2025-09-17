@@ -42,7 +42,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 import re
 from openpyxl import load_workbook
 import json
-
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

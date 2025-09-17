@@ -11,9 +11,9 @@ MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 # Настройки OCR
 # TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Для Windows
 # TESSERACT_PATH = '/usr/bin/tesseract'  # Для Linux
-TESSERACT_PATH = '/opt/homebrew/bin/tesseract'
-
-CHROMEDRIVER_PATH = '/opt/homebrew/bin/chromedriver'
+TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+POPPLER_PATH = r'C:\path\to\poppler\bin'
+CHROMEDRIVER_PATH = r'C:\Windows\chromedriver.exe'
 
 OCR_LANGUAGE = 'rus+eng'
 
