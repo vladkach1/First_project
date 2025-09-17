@@ -17,18 +17,16 @@ from .parallel_processing import run_in_parallel
 logger = logging.getLogger("WebScraping")
 
 def setup_driver():
-    """Настраивает и возвращает экземпляр веб-драйвера"""
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     
+    # ИСПОЛЬЗУЙТЕ ChromeDriverManager с явным указанием версии
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
-    driver.set_page_load_timeout(REQUEST_TIMEOUT)
-    driver.implicitly_wait(10)
     return driver
 
 def scrape_tinko(item_name):

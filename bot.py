@@ -107,7 +107,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик PDF файлов"""
     try:
-        pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
+        TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Для Windows
+        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
         document = update.message.document
         file_id = document.file_id
         file_name = document.file_name
