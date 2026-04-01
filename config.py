@@ -1,5 +1,4 @@
 import os
-import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,12 +16,16 @@ SEARCH_SITES = [
     #"https://www.layta.ru",
     "https://www.etm.ru"
 ]
-MAX_THREADS = 10
 REQUEST_TIMEOUT = 30
+
+# Настройки скрапинга
+MAX_CONCURRENT_PAGES = 10          # макс. параллельных вкладок в браузере
+SCRAPE_SELECTOR_TIMEOUT = 8        # сек. ожидания селектора результатов (быстрый fallback)
+PROGRESS_BATCH_SIZE = 20           # размер батча для прогресс-сообщений
 
 # Настройки кэша
 CACHE_DIR = "cache"
-CACHE_TTL = 3600  # 1 час
+CACHE_TTL = 86400  # 24 часа (было 3600 = 1 час)
 
 # Цвета для статусов оборудования
 COLOR_MAPPING = {

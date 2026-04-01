@@ -2,36 +2,116 @@ import re
 import logging
 import asyncio
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
-from config import SEARCH_SITES, REQUEST_TIMEOUT, MAX_THREADS
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+from config import SEARCH_SITES, REQUEST_TIMEOUT, MAX_CONCURRENT_PAGES, SCRAPE_SELECTOR_TIMEOUT
 from cache import cache
 
-# Настройка логирования
 logger = logging.getLogger("WebScraping")
 
+# ── Browser pool (singleton) ──────────────────────────────────────────────
+# Один браузер на весь процесс, один контекст, семафор ограничивает
+# количество одновременных вкладок.
 
-async def _get_page_html(url, wait_selector, timeout=REQUEST_TIMEOUT):
-    """
-    Открывает URL в headless Chromium через Playwright,
-    ждёт появления селектора и возвращает (html, final_url).
-    """
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
+_playwright_instance = None
+_browser = None
+_context = None
+_semaphore = None
+_browser_lock = None
+
+
+def _get_semaphore():
+    """Lazy-init семафора (должен создаваться внутри event loop)."""
+    global _semaphore
+    if _semaphore is None:
+        _semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
+    return _semaphore
+
+
+def _get_browser_lock():
+    """Lazy-init lock (должен создаваться внутри event loop)."""
+    global _browser_lock
+    if _browser_lock is None:
+        _browser_lock = asyncio.Lock()
+    return _browser_lock
+
+
+async def _ensure_browser():
+    """Запускает браузер если ещё не запущен или упал. Lock предотвращает гонку."""
+    global _playwright_instance, _browser, _context
+    lock = _get_browser_lock()
+    async with lock:
+        if _browser is not None and _browser.is_connected():
+            return
+        # Браузер мёртв или ещё не запущен — (пере)создаём
+        _context = None
+        if _browser is not None:
+            try:
+                await _browser.close()
+            except Exception:
+                pass
+        if _playwright_instance is None:
+            _playwright_instance = await async_playwright().start()
+        _browser = await _playwright_instance.chromium.launch(headless=True)
+        _context = await _browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                        "AppleWebKit/537.36 (KHTML, like Gecko) "
                        "Chrome/120.0.0.0 Safari/537.36"
         )
-        page = await context.new_page()
-        try:
-            await page.goto(url, timeout=timeout * 1000)
-            await page.wait_for_selector(wait_selector, timeout=timeout * 1000)
-            html = await page.content()
-            final_url = page.url
-            return html, final_url
-        finally:
-            await browser.close()
+        logger.info("Браузер запущен")
 
+
+async def close_browser():
+    """Закрывает shared-браузер. Вызывать при остановке бота."""
+    global _browser, _context, _playwright_instance
+    if _context:
+        try:
+            await _context.close()
+        except Exception:
+            pass
+        _context = None
+    if _browser:
+        try:
+            await _browser.close()
+        except Exception:
+            pass
+        _browser = None
+    if _playwright_instance:
+        try:
+            await _playwright_instance.stop()
+        except Exception:
+            pass
+        _playwright_instance = None
+    logger.info("Браузер закрыт")
+
+
+# ── Получение HTML страницы ───────────────────────────────────────────────
+
+async def _get_page_html(url, wait_selector, timeout=REQUEST_TIMEOUT):
+    """
+    Открывает URL в shared-браузере, ждёт селектор до SCRAPE_SELECTOR_TIMEOUT сек.
+    Если селектор не появился — возвращает страницу как есть (парсер обработает 0 items).
+    Семафор ограничивает параллельность до MAX_CONCURRENT_PAGES.
+    """
+    sem = _get_semaphore()
+    async with sem:
+        await _ensure_browser()
+        page = await _context.new_page()
+        try:
+            await page.goto(url, timeout=timeout * 1000, wait_until='domcontentloaded')
+            try:
+                await page.wait_for_selector(
+                    wait_selector, timeout=SCRAPE_SELECTOR_TIMEOUT * 1000
+                )
+            except PlaywrightTimeout:
+                # Селектор не найден за 8с — скорее всего нет результатов
+                logger.debug(f"Селектор не найден за {SCRAPE_SELECTOR_TIMEOUT}с: {url}")
+            html = await page.content()
+            return html, page.url
+        finally:
+            await page.close()
+
+
+# ── Скраперы сайтов ──────────────────────────────────────────────────────
 
 async def scrape_tinko(item_name):
     """Парсинг сайта Tinko.ru"""
@@ -56,6 +136,7 @@ async def scrape_tinko(item_name):
                 'status': "Не найдено",
                 'url': final_url
             })
+            cache.set(cache_key, results)
             return results
 
         for item in items[:3]:
@@ -68,10 +149,12 @@ async def scrape_tinko(item_name):
                 continue
 
             name = name1_elem.text.strip() + " " + name2_elem.text.strip()
-            price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
-            stock = stock_elem.text.strip()
+            try:
+                price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+            except (ValueError, AttributeError):
+                price = 0
+            stock = stock_elem.text.strip() if stock_elem else ""
 
-            # Определение статуса
             if "в наличии" in stock.lower():
                 status = 'В наличии'
             elif "под заказ" in stock.lower():
@@ -89,13 +172,21 @@ async def scrape_tinko(item_name):
                 'url': final_url
             })
 
-        if results:
-            cache.set(cache_key, results)
-
+        if not results:
+            results.append({
+                'site': 'Tinko',
+                'name': item_name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': final_url
+            })
+        cache.set(cache_key, results)
         return results
     except Exception as e:
         logger.error(f"Ошибка парсинга Tinko: {e}")
-        return []
+        fallback = [{'site': 'Tinko', 'name': item_name, 'price': 0, 'status': 'Не найдено', 'url': ''}]
+        cache.set(f"tinko_{item_name}", fallback)
+        return fallback
 
 
 async def scrape_luis(item_name):
@@ -121,6 +212,7 @@ async def scrape_luis(item_name):
                 'status': "Не найдено",
                 'url': final_url
             })
+            cache.set(cache_key, results)
             return results
 
         for item in items[:3]:
@@ -132,13 +224,15 @@ async def scrape_luis(item_name):
                 continue
 
             name = name_elem.text.strip()
-            if price_elem.text.strip() != "Цена":
-                price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
-            else:
+            try:
+                if price_elem.text.strip() != "Цена":
+                    price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+                else:
+                    price = 0
+            except (ValueError, AttributeError):
                 price = 0
-            stock = stock_elem.text.strip()
+            stock = stock_elem.text.strip() if stock_elem else ""
 
-            # Определение статуса
             if "цена" in stock.lower():
                 status = 'Под заказ'
             elif bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))):
@@ -154,13 +248,21 @@ async def scrape_luis(item_name):
                 'url': final_url
             })
 
-        if results:
-            cache.set(cache_key, results)
-
+        if not results:
+            results.append({
+                'site': 'luis',
+                'name': item_name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': final_url
+            })
+        cache.set(cache_key, results)
         return results
     except Exception as e:
         logger.error(f"Ошибка парсинга luis: {e}")
-        return []
+        fallback = [{'site': 'luis', 'name': item_name, 'price': 0, 'status': 'Не найдено', 'url': ''}]
+        cache.set(f"luis_{item_name}", fallback)
+        return fallback
 
 
 async def scrape_layta(item_name):
@@ -171,23 +273,8 @@ async def scrape_layta(item_name):
         if cached_data:
             return cached_data
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
-            try:
-                url = f"https://www.layta.ru/?digiSearch=true&term={item_name}&params=%7Csort%3DDEFAULT"
-                await page.goto(url, timeout=30000)
-                await page.wait_for_selector('.digi-product', timeout=REQUEST_TIMEOUT * 1000)
-
-                html = await page.content()
-                final_url = page.url
-            finally:
-                await browser.close()
+        url = f"https://www.layta.ru/?digiSearch=true&term={item_name}&params=%7Csort%3DDEFAULT"
+        html, final_url = await _get_page_html(url, '.digi-product', timeout=30)
 
         soup = BeautifulSoup(html, 'html.parser')
         items = soup.select('.digi-product')
@@ -201,6 +288,7 @@ async def scrape_layta(item_name):
                 'status': "Не найдено",
                 'url': final_url
             })
+            cache.set(cache_key, results)
             return results
 
         for item in items[:3]:
@@ -249,13 +337,21 @@ async def scrape_layta(item_name):
                 'url': final_url
             })
 
-        if results:
-            cache.set(cache_key, results)
-
+        if not results:
+            results.append({
+                'site': 'layta',
+                'name': item_name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': final_url
+            })
+        cache.set(cache_key, results)
         return results
     except Exception as e:
         logger.error(f"Ошибка парсинга layta: {e}")
-        return []
+        fallback = [{'site': 'layta', 'name': item_name, 'price': 0, 'status': 'Не найдено', 'url': ''}]
+        cache.set(f"layta_{item_name}", fallback)
+        return fallback
 
 
 async def scrape_etm(item_name):
@@ -281,6 +377,7 @@ async def scrape_etm(item_name):
                 'status': "Не найдено",
                 'url': final_url
             })
+            cache.set(cache_key, results)
             return results
 
         for item in items[:3]:
@@ -294,26 +391,27 @@ async def scrape_etm(item_name):
 
             name = name1_elem.text.strip() + " " + name2_elem.text.strip()
 
-            if (price_elem.text.strip() != "По запросу") and \
-               (price_elem.text.strip() != "Свяжитесь с нами") and \
-               (price_elem.text.strip() != "н/д"):
-                price = float(
-                    price_elem.text
-                    .replace(' ', '')
-                    .replace('₽/шт', '')
-                    .replace(',', '.')
-                    .replace('₽/компл', '')
-                    .replace('₽/м', '')
-                    .replace('₽/упак', '')
-                    .replace('₽/уп', '')
-                    .replace('₽/рул', '')
-                )
-            else:
+            try:
+                price_text = price_elem.text.strip()
+                if price_text not in ("По запросу", "Свяжитесь с нами", "н/д"):
+                    price = float(
+                        price_text
+                        .replace(' ', '')
+                        .replace('₽/шт', '')
+                        .replace(',', '.')
+                        .replace('₽/компл', '')
+                        .replace('₽/м', '')
+                        .replace('₽/упак', '')
+                        .replace('₽/уп', '')
+                        .replace('₽/рул', '')
+                    )
+                else:
+                    price = 0
+            except (ValueError, AttributeError):
                 price = 0
 
-            stock = stock_elem.text.strip()
+            stock = stock_elem.text.strip() if stock_elem else ""
 
-            # Определение статуса
             if "по запросу" in stock.lower():
                 status = 'Под заказ'
             else:
@@ -327,15 +425,25 @@ async def scrape_etm(item_name):
                 'url': final_url
             })
 
-        if results:
-            cache.set(cache_key, results)
+        if not results:
+            results.append({
+                'site': 'etm',
+                'name': item_name,
+                'price': 0,
+                'status': "Не найдено",
+                'url': final_url
+            })
+        cache.set(cache_key, results)
         return results
     except Exception as e:
         logger.error(f"Ошибка парсинга etm: {e}")
-        return []
+        fallback = [{'site': 'etm', 'name': item_name, 'price': 0, 'status': 'Не найдено', 'url': ''}]
+        cache.set(f"etm_{item_name}", fallback)
+        return fallback
 
 
-# Маппинг сайтов на async-скраперы
+# ── Маппинг сайтов ───────────────────────────────────────────────────────
+
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
@@ -347,19 +455,12 @@ SITE_SCRAPERS = {
 async def search_equipment_on_sites_async(equipment_name):
     """
     Асинхронный поиск оборудования на всех сайтах параллельно.
-    Использует Playwright async API — не блокирует event loop.
-
-    :param equipment_name: Название оборудования
-    :return: Список результатов со всех сайтов
+    Браузер shared, семафор ограничивает кол-во вкладок.
     """
     try:
-        logger.info(f"Поиск оборудования: {equipment_name}")
+        logger.info(f"Поиск: {equipment_name}")
 
-        # Запускаем все скраперы параллельно через asyncio.gather
-        tasks = [
-            scraper(equipment_name)
-            for scraper in SITE_SCRAPERS.values()
-        ]
+        tasks = [scraper(equipment_name) for scraper in SITE_SCRAPERS.values()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_results = []
@@ -370,8 +471,8 @@ async def search_equipment_on_sites_async(equipment_name):
             if result:
                 all_results.extend(result)
 
-        logger.info(f"Найдено {len(all_results)} предложений для {equipment_name}")
+        logger.info(f"Найдено {len(all_results)} предложений для '{equipment_name}'")
         return all_results
     except Exception as e:
-        logger.error(f"Ошибка поиска оборудования: {e}")
+        logger.error(f"Ошибка поиска: {e}")
         return []

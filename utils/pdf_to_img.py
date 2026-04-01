@@ -1,4 +1,3 @@
-import PyPDF2
 import pdfplumber
 from PIL import Image
 import re
@@ -35,7 +34,7 @@ def crop_page_to_region(pdf_path, page_num, crop_region):
         return image
 
     except Exception as e:
-        print(f"Ошибка обрезки страницы {page_num}: {e}")
+        logger.error(f"Ошибка обрезки страницы {page_num}: {e}")
         return None
 
 
@@ -91,7 +90,7 @@ def extract_text_from_region(pdf_path, page_num, crop_region):
                     results['text_lines'] = []  # Очищаем для переизвлечения через OCR
 
     except Exception as e:
-        print(f"Ошибка pdfplumber на странице {page_num}: {e}")
+        logger.error(f"Ошибка pdfplumber на странице {page_num}: {e}")
         results['used_ocr'] = True
 
     # Если нужно использовать OCR или pdfplumber не сработал
@@ -111,13 +110,13 @@ def analyze_pdf_region(pdf_path, crop_region):
     """Анализирует только указанную область PDF"""
     results = []
 
-    # Получаем общее количество страниц
-    with open(pdf_path, 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        total_pages = len(pdf_reader.pages)
+    # Получаем количество страниц через fitz (PyMuPDF)
+    doc = fitz.open(pdf_path)
+    total_pages = len(doc)
+    doc.close()
 
     for page_num in range(total_pages):
-        print(f"Обработка страницы {page_num + 1}/{total_pages}")
+        logger.info(f"Обработка страницы {page_num + 1}/{total_pages}")
 
         page_result = {
             'page_number': page_num + 1,

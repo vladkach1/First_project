@@ -13,278 +13,262 @@ from openpyxl.drawing.image import Image
 # Настройка логирования
 logger = logging.getLogger("ExcelGenerator")
 
+# Путь к картинке шапки — относительно корня проекта
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HEADER_IMAGE_PATH = os.path.join(_PROJECT_ROOT, "asets", "Head.jpg")
+
+
 def apply_style(ws):
     """Применяет стили к листу Excel"""
-    # Шрифт заголовков
     header_font = Font(bold=True, size=12)
     header_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    
-    # Стиль границ
+
     thin_border = Border(
         left=Side(style='thin'),
         right=Side(style='thin'),
         top=Side(style='thin'),
         bottom=Side(style='thin')
     )
-    
-    # Применение стилей к заголовкам
+
     for cell in ws[1]:
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = header_alignment
         cell.border = thin_border
-    
-    # Применение стилей к данным
+
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         for cell in row:
             cell.border = thin_border
-            if cell.column_letter in ['B', 'C']:  # Наименование и Обозначение
+            if cell.column_letter in ['B', 'C']:
                 cell.alignment = Alignment(wrap_text=True)
-    
-    # Автонастройка ширины столбцов
+
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter
-        
         for cell in col:
             try:
                 if len(str(cell.value)) > max_length:
-                    max_length = len(cell.value)
+                    max_length = len(str(cell.value))
             except:
                 pass
-        
         adjusted_width = (max_length + 2) * 1.2
         ws.column_dimensions[column].width = adjusted_width
 
+
+def _find_best_offer(need_item, site_results):
+    """
+    Находит лучшее предложение для позиции из результатов поиска.
+
+    :param need_item: dict с 'name', 'quantity', 'unit'
+    :param site_results: список результатов скрапинга для этой позиции
+    :return: (best_offer_dict, count) или (None, 1)
+    """
+    need_name = need_item['name']
+    need_unit = need_item['unit']
+    candidates = []
+
+    for item in site_results:
+        # Определяем кратность упаковки
+        count = 1
+        if len(need_unit) > 1:
+            escaped_unit = re.escape(need_unit[:-1])
+            pattern = rf'\((\d+)\s*{escaped_unit}\)'
+            match = re.search(pattern, item['name'])
+            if match:
+                count = int(match.group(1))
+
+        coff = similarity(need_name, item['name'])
+        candidates.append({
+            'item': item,
+            'score': coff[0],
+            'extra_words': coff[1],
+            'count': count
+        })
+
+    if not candidates:
+        return None, 1
+
+    # Сортируем: similarity desc → extra_words asc → price desc
+    candidates.sort(key=lambda x: (-x['score'], x['extra_words'], -x['item']['price']))
+
+    best = candidates[0]
+    return best, best['count']
+
+
 def create_search_report(equipment_data, scraped_data):
     """
-    Создает первый отчет с результатами поиска
-    
-    :param equipment_data: Данные оборудования из PDF
+    Создает отчет с результатами поиска.
+
+    :param equipment_data: Данные оборудования из PDF/Excel
     :param scraped_data: Результаты поиска на сайтах
-    :return: Объект Workbook Excel
+    :return: Workbook или None
     """
     try:
         if not equipment_data or not scraped_data:
             logger.warning("Пустые входные данные")
-            return
+            return None
+
         logger.info("Создание отчета поиска оборудования")
-        report_data = [] #Список подходящих по наименованию
-        result = [] #Список подходящих по наименованиям и самых дешёвых
-        # Создаем DataFrame
-        #Выбираем самое дещёвое предложение
+        result = []
+
         for i, need_item in enumerate(equipment_data):
-            if i >= len(scraped_data):
-                logger.warning(f"Нет данных поиска для элемента {i}")
+            if i >= len(scraped_data) or not scraped_data[i]:
+                logger.warning(f"Нет данных поиска для '{need_item['name']}'")
                 continue
-            report_data.clear()
-            need_name = need_item['name']
-            need_quantity = need_item['quantity']
-            need_unit = need_item['unit']
-            count=1
 
-            coff_similarity = 0.0
-            if not scraped_data[i]:
-                logger.warning(f"Нет предложений для '{need_name}'")
+            best, count = _find_best_offer(need_item, scraped_data[i])
+            if best is None:
+                logger.warning(f"Не найдено предложений для '{need_item['name']}'")
                 continue
-            for item in scraped_data[i]:
-                print(need_item['unit'][:-1])
-                escaped_unit = re.escape(need_item['unit'][:-1])
 
-                pattern = rf'\((\d+)\s*{escaped_unit}\)'
-                match = re.search(pattern, item['name'])
-
-                if match:
-                    count = int(match.group(1))
-                    print(count)
-                coff = similarity(need_name,item['name'])
-                if  coff[0] > coff_similarity:
-                    report_data.append({
-                    '№': i+1,
-                    'Наименование': item['name'],
-                    'Количество': need_quantity/count,
-                    'Ед. изм.': need_unit, 
-                    'Цена': item['price'],
-                    'Сайт': item['site'],
-                    'Коффициент совпадения с запросом': coff[0],
-                    'Запрос': need_name,
-                    'Колличество лишних слов в названии на сайте': coff[1],
-                    'Статус': item['status']
-                    })
-                    coff_similarity = coff[0]
-            if not report_data:
-                logger.warning(f"Не найдено подходящих предложений для '{need_name}'")
-                continue
-            report_data.sort(key=lambda x: x['Цена'], reverse=True)
-            report_data.sort(key=lambda x: x['Колличество лишних слов в названии на сайте'])
-            report_data.sort(key=lambda x: x['Коффициент совпадения с запросом'], reverse=True)
-
-            best_offer = report_data[0]
             result.append({
-                    '№': i+1,
-                    'Наименование': best_offer['Наименование'],
-                    'Количество': best_offer['Количество'],
-                    'Ед. изм.': need_unit, 
-                    'Цена': best_offer['Цена'],
-                    'Сайт': best_offer['Сайт'],
-                    'Коффициент совпадения с запросом': best_offer['Коффициент совпадения с запросом'],
-                    'Запрос': need_name,
-                    'Колличество лишних слов в названии на сайте': best_offer['Колличество лишних слов в названии на сайте'],
-                    'Статус': best_offer['Статус']
-                    })
+                '№': i + 1,
+                'Наименование': best['item']['name'],
+                'Количество': need_item['quantity'] / count,
+                'Ед. изм.': need_item['unit'],
+                'Цена': best['item']['price'],
+                'Сайт': best['item']['site'],
+                'Коэффициент совпадения': round(best['score'], 3),
+                'Запрос': need_item['name'],
+                'Лишних слов': best['extra_words'],
+                'Статус': best['item']['status']
+            })
+
         if not result:
             logger.warning("Не найдено ни одного подходящего предложения")
-            return
-        df = pd.DataFrame(result)
+            return None
 
-        #Создаём книгу ексель
+        df = pd.DataFrame(result)
         wb = Workbook()
         ws = wb.active
         ws.title = "Результаты поиска"
 
-        # Пропускаем 11 строк
         START_ROW = 12
 
-        # Заголовки (строка 12)
         headers = list(df.columns)
         for col_idx, header in enumerate(headers, 1):
             ws.cell(row=START_ROW, column=col_idx, value=header)
 
-        # Заполняем данными начиная с строки 13
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), START_ROW + 1):
             for c_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
-                # Раскрашиваем статус
-                if c_idx == len(headers):  # Последний столбец
+                if c_idx == len(headers):  # Последний столбец — Статус
                     status = value
-                    color = COLOR_MAPPING.get(status, 'FFFFFF')
-                    if color=='FFFFFF':
-                        color='FFA500'
+                    color = COLOR_MAPPING.get(status, 'FFA500')
                     cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
-        # Применяем стили
+
         apply_style(ws)
-
         return wb
-    
-    except Exception as e:
 
-        logger.error(f"Ошибка создания отчета поиска: {e}")
-        raise RuntimeError("Ошибка генерации отчета поиска.")
+    except Exception as e:
+        logger.error(f"Ошибка создания отчета поиска: {e}", exc_info=True)
+        return None
+
 
 def create_commercial_offer(equipment_data, scraped_data, name_data):
     """
-    Создает коммерческое предложение в формате Excel
-    
-    :param equipment_data: Данные оборудования из PDF
+    Создает коммерческое предложение в формате Excel.
+
+    :param equipment_data: Данные оборудования из PDF/Excel
     :param scraped_data: Результаты поиска на сайтах
-    :return: Объект Workbook Excel
+    :param name_data: Список всех наименований (включая заголовки разделов)
+    :return: Workbook или None
     """
     try:
         logger.info("Создание коммерческого предложения")
-        report_data = [] #Список подходящих по наименованию
-        result = [] #Список подходящих по наименованиям и самых дешёвых
-        total_sum=0
-        shift=0
-        # Создаем DataFrame
-        #Выбираем самое дещёвое предложение
+        result = []
+        total_sum = 0
+        shift = 0
+
         for i, need_item in enumerate(equipment_data):
-            print(name_data[i+shift],need_item['name'])
-            while name_data[i+shift]!=need_item['name']:
+            # Вставляем строки-заголовки разделов (без цены)
+            while (i + shift) < len(name_data) and name_data[i + shift] != need_item['name']:
                 result.append({
-                    '№': i+1, 
-                    'Наименование': name_data[i+shift], 
-                    'Ед. изм.': "", 
-                    'Кол-во': "", 
-                    'Цена за ед.': "", 
+                    '№': i + 1,
+                    'Наименование': name_data[i + shift],
+                    'Ед. изм.': "",
+                    'Кол-во': "",
+                    'Цена за ед.': "",
                     'Сумма, руб.': ""
-                    })
-                shift+=1
-            report_data.clear()
-            need_name = need_item['name']
-            need_quantity = need_item['quantity']
-            need_unit = need_item['unit']
-            count=1
-            coff_similarity = 0.0
-            for item in scraped_data[i]:
-                print(need_item['unit'][:-1])
-                escaped_unit = re.escape(need_item['unit'][:-1])
+                })
+                shift += 1
 
-                pattern = rf'\((\d+)\s*{escaped_unit}\)'
-                match = re.search(pattern, item['name'])
+            if i >= len(scraped_data) or not scraped_data[i]:
+                # Нет результатов — вставляем позицию без цены
+                result.append({
+                    '№': i + 1,
+                    'Наименование': need_item['name'],
+                    'Ед. изм.': need_item['unit'],
+                    'Кол-во': need_item['quantity'],
+                    'Цена за ед.': 0,
+                    'Сумма, руб.': 0
+                })
+                continue
 
-                if match:
-                    count = int(match.group(1))
-                    print(count)
-                coff = similarity(need_name,item['name'])
-                if  coff[0] > coff_similarity:
-                    report_data.append({
-                    '№': i+1,
-                    'Наименование': item['name'],
-                    'Кол-во': need_quantity/count,
-                    'Ед. изм.': need_unit, 
-                    'Цена за ед.': item['price'],
-                    'Сайт': item['site'],
-                    'Коффициент совпадения с запросом': coff_similarity,
-                    'Колличество лишних слов в названии на сайте': coff[1],
-                    'Статус': item['status']
-                    })
-                    coff_similarity = coff[0]
+            best, count = _find_best_offer(need_item, scraped_data[i])
+            if best is None:
+                result.append({
+                    '№': i + 1,
+                    'Наименование': need_item['name'],
+                    'Ед. изм.': need_item['unit'],
+                    'Кол-во': need_item['quantity'],
+                    'Цена за ед.': 0,
+                    'Сумма, руб.': 0
+                })
+                continue
 
-            report_data.sort(key=lambda x: x['Цена за ед.'], reverse=True)
-            report_data.sort(key=lambda x: x['Колличество лишних слов в названии на сайте'])
-            report_data.sort(key=lambda x: x['Коффициент совпадения с запросом'], reverse=True)
+            quantity = need_item['quantity'] / count
+            price = best['item']['price']
+            row_sum = price * quantity
 
-            best_offer = report_data[0]
             result.append({
-                    '№': i+1, 
-                    'Наименование': best_offer['Наименование'], 
-                    'Ед. изм.': need_unit, 
-                    'Кол-во': best_offer['Кол-во'], 
-                    'Цена за ед.': best_offer['Цена за ед.'], 
-                    'Сумма, руб.': best_offer['Цена за ед.']*best_offer['Кол-во']
-                    })
-            total_sum += best_offer['Цена за ед.']*best_offer['Кол-во']
-        df = pd.DataFrame(result)
+                '№': i + 1,
+                'Наименование': best['item']['name'],
+                'Ед. изм.': need_item['unit'],
+                'Кол-во': quantity,
+                'Цена за ед.': price,
+                'Сумма, руб.': round(row_sum, 2)
+            })
+            total_sum += row_sum
 
-        #Создаём книгу ексель
+        if not result:
+            logger.warning("Нет данных для коммерческого предложения")
+            return None
+
+        df = pd.DataFrame(result)
         wb = Workbook()
         ws = wb.active
-        ws.title = "Результаты поиска"
+        ws.title = "Коммерческое предложение"
 
-        img = Image('/Users/vladislavpaschenko/Documents/GitHub/First_project/asets/Head.jpg')
-        ws.add_image(img, 'A1')  # добавляем в ячейку D1
+        # Вставляем картинку шапки, если файл существует
+        if os.path.exists(_HEADER_IMAGE_PATH):
+            img = Image(_HEADER_IMAGE_PATH)
+            ws.add_image(img, 'A1')
+        else:
+            logger.warning(f"Файл шапки не найден: {_HEADER_IMAGE_PATH}")
 
-        # Пропускаем 11 строк
         START_ROW = 12
 
-        #Заголовки
         headers = list(df.columns)
         for col_idx, header in enumerate(headers, 1):
             ws.cell(row=START_ROW, column=col_idx, value=header)
 
-        #Заполняем даными
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), START_ROW + 1):
             for c_idx, value in enumerate(row, 1):
-                cell = ws.cell(row=r_idx, column=c_idx, value=value)
-                # Раскрашиваем статус
-                if c_idx == len(headers):  # Последний столбец
-                    status = value
-                    color = COLOR_MAPPING.get(status, 'FFFFFF')
-                    cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+                ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # Добавляем итоговую строку
-        ws.append(['']+["ИТОГО"]+['']*3+[f"{total_sum:.2f}"])
-        ws.append(['']+["Расходные материалы"]+['']*3+[f"{total_sum:.2f}"])
-        ws.append(['']+["Итого оборудование и расходные материалы"]+['']*3+[f"{total_sum:.2f}"])
-        ws.append(['']+["Монтажные работы"]+['']*3+[f"{total_sum:.2f}"])
-        ws.append(['']+["ВСЕГО С НДС 20%:"]+['']*3+[f"{total_sum:.2f}"])
-        # Применяем стили
+        # Итоговые строки
+        total_formatted = f"{total_sum:.2f}"
+        ws.append([''] + ["ИТОГО"] + [''] * 3 + [total_formatted])
+        ws.append([''] + ["Расходные материалы"] + [''] * 3 + [total_formatted])
+        ws.append([''] + ["Итого оборудование и расходные материалы"] + [''] * 3 + [total_formatted])
+        ws.append([''] + ["Монтажные работы"] + [''] * 3 + [total_formatted])
+        ws.append([''] + ["ВСЕГО С НДС 20%:"] + [''] * 3 + [f"{total_sum * 1.2:.2f}"])
+
         apply_style(ws)
-
         return wb
-    
-    except Exception as e:
 
-        logger.error(f"Ошибка создания коммерческого предложения: {e}")
-        raise RuntimeError("Ошибка генерации коммерческого предложения.")
+    except Exception as e:
+        logger.error(f"Ошибка создания коммерческого предложения: {e}", exc_info=True)
+        return None

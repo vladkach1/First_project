@@ -4,9 +4,7 @@ import re
 import logging
 import asyncio
 import io
-import json
 
-import pandas as pd
 from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -16,16 +14,13 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler
 )
-from openpyxl import load_workbook
 
-from config import BOT_TOKEN, MAX_FILE_SIZE, SEARCH_SITES
+from config import BOT_TOKEN, MAX_FILE_SIZE, SEARCH_SITES, PROGRESS_BATCH_SIZE
 from utils.pdf_to_img import (
-    crop_page_to_region, extract_text_from_region, analyze_pdf_region,
-    print_region_results, export_region_to_file, parse_excel_to_structure
+    analyze_pdf_region, print_region_results,
+    export_region_to_file, parse_excel_to_structure
 )
-from utils.ocr_processing import extract_text_from_image
-from utils.text_analysis import parse_equipment_spec
-from utils.web_scraping import search_equipment_on_sites_async
+from utils.web_scraping import search_equipment_on_sites_async, close_browser
 from utils.excel_generator import create_search_report, create_commercial_offer
 from error_handler import handle_error
 from cache import cache
@@ -37,16 +32,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TelegramBot")
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start с инлайн-кнопкой"""
     user = update.effective_user
-    
-    # Создаем инлайн-клавиатуру
+
     keyboard = [
         [InlineKeyboardButton("📖 Инструкция", callback_data='instruction')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     welcome_message = (
         f"Привет, {user.first_name}! 👋\n\n"
         "Я бот для анализа спецификаций оборудования. Просто отправь мне PDF или Excel файл со списком оборудования, и я:\n\n"
@@ -62,11 +57,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик нажатий на инлайн-кнопки"""
     query = update.callback_query
     await query.answer()
-    
+
     if query.data == 'instruction':
         instruction_text = (
             "📖 ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ БОТА\n\n"
@@ -91,134 +87,177 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         await query.edit_message_text(instruction_text)
 
-async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик PDF файлов"""
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик документов (PDF / XLSX)"""
+    temp_path = None
     try:
         document = update.message.document
-        file_id = document.file_id
-        file_name = document.file_name
-        file = await context.bot.get_file(file_id)
-        string_list=[]
+        file_name = document.file_name or ""
+        mime_type = document.mime_type or ""
 
-        # Отправляем сообщение о начале обработки
-        await update.message.reply_text("🔄 Начинаю обработку файла...")
-        
-        if update.message.document.mime_type == 'application/pdf':
-            await file.download_to_drive("temp.pdf")
-            pdf_path = "temp.pdf"
-    
-            if not os.path.exists(pdf_path):
-                await update.message.reply_text("❌ Файл не найден после загрузки!")
-                return
-    
-            # Область для обработки: (x0, y0, x1, y1) в пунктах
-            crop_region = (113, 30, 995, 670)
-    
-            await update.message.reply_text("📄 Анализирую PDF файл...")
-            results = await asyncio.to_thread(analyze_pdf_region, pdf_path, crop_region)
-    
-            # Вывод результатов в консоль
-            print_region_results(results)
-    
-            # Экспорт в файл
-            output_file = 'extracted_region_text.txt'
-            string_list = export_region_to_file(results, output_file)
-        elif file_name and file_name.lower().endswith('.xlsx'):
-            await file.download_to_drive("temp.xlsx")
-            pdf_path = "temp.xlsx"
-            await update.message.reply_text("📊 Анализирую Excel файл...")
-            # Загружаем Excel файл
-            data = await asyncio.to_thread(parse_excel_to_structure, pdf_path)
+        # Проверка размера файла
+        if document.file_size and document.file_size > MAX_FILE_SIZE:
+            await update.message.reply_text(
+                f"❌ Файл слишком большой ({document.file_size // (1024*1024)} MB). "
+                f"Максимум: {MAX_FILE_SIZE // (1024*1024)} MB."
+            )
+            return
 
-        # Выводим результат
-            print("Структура данных:")
-            print(data)               
-        else:
+        is_pdf = mime_type == 'application/pdf'
+        is_xlsx = file_name.lower().endswith('.xlsx')
+
+        if not is_pdf and not is_xlsx:
             await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате PDF или XLSX.")
             return
-            
-            
-        # Создаем временную директорию
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            
-            if update.message.document.mime_type == 'application/pdf':
-                data=[]
 
-                for i in string_list:
-                    data.append(i.rsplit(' ',2))
+        await update.message.reply_text("🔄 Начинаю обработку файла...")
 
-            equipment_data = []
-            name_data = []
-            for i in data:
-                if (len(i)==1):
+        # Скачиваем во временный файл
+        suffix = '.pdf' if is_pdf else '.xlsx'
+        tg_file = await context.bot.get_file(document.file_id)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        temp_path = tmp.name
+        tmp.close()
+        await tg_file.download_to_drive(temp_path)
+
+        # Парсим файл
+        if is_pdf:
+            crop_region = (113, 30, 995, 670)
+            await update.message.reply_text("📄 Анализирую PDF файл...")
+            results = await asyncio.to_thread(analyze_pdf_region, temp_path, crop_region)
+            print_region_results(results)
+            string_list = export_region_to_file(results, 'extracted_region_text.txt')
+
+            data = []
+            for i in string_list:
+                data.append(i.rsplit(' ', 2))
+        else:
+            await update.message.reply_text("📊 Анализирую Excel файл...")
+            data = await asyncio.to_thread(parse_excel_to_structure, temp_path)
+            logger.info(f"Структура данных: {len(data)} строк")
+
+        # Разбираем данные
+        equipment_data = []
+        name_data = []
+        for i in data:
+            if len(i) == 1:
+                name_data.append(i[0])
+            elif len(i) == 3:
+                if re.fullmatch(r'\d+\.?\d*', i[2]):
+                    equipment_data.append({
+                        'name': i[0],
+                        'quantity': float(i[2]),
+                        'unit': i[1]
+                    })
                     name_data.append(i[0])
-                elif (len(i)==3):
-                    if bool(re.fullmatch(r'\d+\.?\d*', i[2])):
-                        item = {
-                                'name': i[0],
-                                'quantity': float(i[2]),
-                                'unit': i[1]
-                            }
-                        name_data.append(i[0])
-                        equipment_data.append(item)
-                    else:
-                        print("неправильное количество ",i[2])
                 else:
-                    print("неправильное list ",i,len(i))
-            # Этап 1: Поиск оборудования на сайтах (асинхронно)
-            await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
-            scrape_tasks = [
-                search_equipment_on_sites_async(item['name'])
-                for item in equipment_data
-            ]
-            scraped_data = await asyncio.gather(*scrape_tasks)
-            
-            # Этап 2: Генерация отчетов (асинхронно)
-            await update.message.reply_text("📊 Формирую отчеты...")
+                    logger.warning(f"Неправильное количество: '{i[2]}' в строке {i}")
+            else:
+                logger.warning(f"Неправильный формат строки: {i}")
 
-            # Отчет 1: Результаты поиска
-            search_report = await asyncio.to_thread(create_search_report, equipment_data, scraped_data)
+        if not equipment_data:
+            await update.message.reply_text(
+                "❌ Не удалось извлечь данные оборудования из файла.\n"
+                "Проверьте формат данных."
+            )
+            return
+
+        # ── Этап 1: Поиск на сайтах (с дедупликацией и батчами) ──────
+
+        # Дедупликация: ищем только уникальные наименования
+        unique_names = list(dict.fromkeys(item['name'] for item in equipment_data))
+        total_unique = len(unique_names)
+        total_all = len(equipment_data)
+        dedup_saved = total_all - total_unique
+
+        info_msg = f"🌐 Ищу {total_unique} уникальных позиций на {len(SEARCH_SITES)} сайтах..."
+        if dedup_saved > 0:
+            info_msg += f"\n(пропущено {dedup_saved} дубликатов)"
+        await update.message.reply_text(info_msg)
+
+        # Прогресс-сообщение (одно, обновляется)
+        progress_msg = await update.message.reply_text(
+            f"⏳ 0/{total_unique} позиций..."
+        )
+
+        # Батчевая обработка с прогрессом
+        unique_results = {}
+        batch_size = PROGRESS_BATCH_SIZE
+
+        for batch_start in range(0, total_unique, batch_size):
+            batch = unique_names[batch_start:batch_start + batch_size]
+            tasks = [search_equipment_on_sites_async(name) for name in batch]
+            batch_results = await asyncio.gather(*tasks)
+
+            for name, result in zip(batch, batch_results):
+                unique_results[name] = result
+
+            processed = min(batch_start + batch_size, total_unique)
+            try:
+                await progress_msg.edit_text(
+                    f"⏳ {processed}/{total_unique} позиций обработано..."
+                )
+            except Exception:
+                pass  # Telegram rate limit на edit
+
+        # Маппинг обратно на все позиции (включая дубликаты)
+        scraped_data = [unique_results.get(item['name'], []) for item in equipment_data]
+
+        try:
+            await progress_msg.edit_text(f"✅ Поиск завершён: {total_unique} позиций")
+        except Exception:
+            pass
+
+        # ── Этап 2: Генерация отчётов ────────────────────────────────
+
+        await update.message.reply_text("📊 Формирую отчеты...")
+
+        search_report = await asyncio.to_thread(
+            create_search_report, equipment_data, scraped_data
+        )
+        if search_report:
             report_buffer = io.BytesIO()
-            search_report.save(report_buffer)  # Сохраняем в буфер
-            report_buffer.seek(0)  # Перемещаем указатель в начало
-        
+            search_report.save(report_buffer)
+            report_buffer.seek(0)
             await update.message.reply_document(
                 document=InputFile(report_buffer, filename='search_report.xlsx'),
-                caption="✅ Результаты поиска оборудования\n\n"
+                caption=(
+                    "✅ Результаты поиска оборудования\n\n"
                     "Цветовая маркировка статусов:\n"
                     "🟢 Зеленый - полностью доступно\n"
                     "🔵 Синий - требуется запрос на покупку\n"
                     "🟠 Оранжевый - мало по наличию\n"
                     "🔴 Красный - недоступно\n"
                     "🟡 Желтый - санкционное оборудование"
+                )
             )
-            
-            # Отчет 2: Коммерческое предложение
-            await update.message.reply_text("💼 Формирую коммерческое предложение...")
-            commercial_report = await asyncio.to_thread(create_commercial_offer, equipment_data, scraped_data, name_data)
+        else:
+            await update.message.reply_text("⚠️ Не удалось найти подходящие предложения для отчёта.")
+
+        await update.message.reply_text("💼 Формирую коммерческое предложение...")
+        commercial_report = await asyncio.to_thread(
+            create_commercial_offer, equipment_data, scraped_data, name_data
+        )
+        if commercial_report:
             commercial_buffer = io.BytesIO()
-            commercial_report.save(commercial_buffer)  # Сохраняем в буфер
-            commercial_buffer.seek(0)  # Перемещаем указатель в начало
-        
+            commercial_report.save(commercial_buffer)
+            commercial_buffer.seek(0)
             await update.message.reply_document(
                 document=InputFile(commercial_buffer, filename='commercial_offer.xlsx'),
                 caption="✅ Коммерческое предложение сформировано"
             )
-            # Финализация
-            await update.message.reply_text(
-                "🎉 Обработка завершена успешно!\n\n"
-                "Если у вас есть еще файлы, отправьте их сейчас.\n\n"
-                "❓ Нужна помощь? Обращайтесь к администраторам: @vlad_pash или @shishqo"
-            )
-            
-        # Очистка временных файлов
-        if os.path.exists("temp.pdf"):
-            os.unlink("temp.pdf")
-        if os.path.exists("temp.xlsx"):
-            os.unlink("temp.xlsx")
-    
+        else:
+            await update.message.reply_text("⚠️ Не удалось сформировать коммерческое предложение.")
+
+        await update.message.reply_text(
+            "🎉 Обработка завершена!\n\n"
+            "Если у вас есть еще файлы, отправьте их сейчас.\n\n"
+            "❓ Нужна помощь? Обращайтесь к администраторам: @vlad_pash или @shishqo"
+        )
+
     except Exception as e:
-        logger.error(f"Ошибка обработки файла: {e}")
+        logger.error(f"Ошибка обработки файла: {e}", exc_info=True)
         await update.message.reply_text(
             "❌ Произошла ошибка при обработке вашего файла.\n\n"
             "Пожалуйста:\n"
@@ -226,32 +265,40 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "2. Убедитесь, что данные соответствуют примеру\n"
             "3. Попробуйте позже или обратитесь к администраторам: @vlad_pash или @shishqo"
         )
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+async def post_shutdown(application):
+    """Cleanup при остановке бота — закрываем shared-браузер."""
+    await close_browser()
+
 
 def main():
     """Основная функция запуска бота"""
     try:
-        # Очистка старого кэша
         cache.clear_old_cache()
-        
-        # Создаем экземпляр Application
-        application = Application.builder().token(BOT_TOKEN).build()
-        
-        # Регистрируем обработчики
+
+        application = (
+            Application.builder()
+            .token(BOT_TOKEN)
+            .post_shutdown(post_shutdown)
+            .build()
+        )
+
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CallbackQueryHandler(button_handler))
-        application.add_handler(MessageHandler(filters.Document.ALL, handle_pdf))
+        application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
         application.add_error_handler(handle_error)
-        
-        # Запускаем бота
+
         logger.info("Бот запущен и ожидает сообщений...")
-        
-        # Запускаем polling в отдельном event loop
         application.run_polling()
-        
+
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}")
-        # Принудительный выход при критической ошибке
         os._exit(1)
+
 
 if __name__ == '__main__':
     main()
