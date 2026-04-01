@@ -8,14 +8,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
-# Настройки OCR
-# TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Для Windows
-# TESSERACT_PATH = '/usr/bin/tesseract'  # Для Linux
-TESSERACT_PATH = '/opt/homebrew/bin/tesseract'
-
-CHROMEDRIVER_PATH = '/opt/homebrew/bin/chromedriver'
-
-OCR_LANGUAGE = 'rus+eng'
+# Настройки OCR (RapidOCR — без внешних бинарников)
 
 # Настройки поиска
 SEARCH_SITES = [

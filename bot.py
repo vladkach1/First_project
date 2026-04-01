@@ -4,7 +4,10 @@ import re
 import logging
 import asyncio
 import io
-from telegram import Update, InputFile
+import json
+
+import pandas as pd
+from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,35 +16,19 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler
 )
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import PyPDF2
-import pdfplumber
-import pytesseract
-from pdf2image import convert_from_path
-from PIL import Image
-import re
-import os
-import fitz
-import io
-from config import BOT_TOKEN, MAX_FILE_SIZE
-from utils.pdf_to_img import crop_page_to_region,extract_text_from_region,analyze_pdf_region,print_region_results,export_region_to_file,parse_excel_to_structure
+from openpyxl import load_workbook
+
+from config import BOT_TOKEN, MAX_FILE_SIZE, SEARCH_SITES
+from utils.pdf_to_img import (
+    crop_page_to_region, extract_text_from_region, analyze_pdf_region,
+    print_region_results, export_region_to_file, parse_excel_to_structure
+)
 from utils.ocr_processing import extract_text_from_image
 from utils.text_analysis import parse_equipment_spec
-from utils.web_scraping import search_equipment_on_sites
+from utils.web_scraping import search_equipment_on_sites_async
 from utils.excel_generator import create_search_report, create_commercial_offer
 from error_handler import handle_error
 from cache import cache
-from config import BOT_TOKEN, MAX_FILE_SIZE, SEARCH_SITES
-import os
-import logging
-import asyncio
-import tempfile
-import pandas as pd
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-import re
-from openpyxl import load_workbook
-import json
 
 # Настройка логирования
 logging.basicConfig(
@@ -107,7 +94,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик PDF файлов"""
     try:
-        pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/bin/tesseract'
         document = update.message.document
         file_id = document.file_id
         file_name = document.file_name
@@ -129,7 +115,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             crop_region = (113, 30, 995, 670)
     
             await update.message.reply_text("📄 Анализирую PDF файл...")
-            results = analyze_pdf_region(pdf_path, crop_region)
+            results = await asyncio.to_thread(analyze_pdf_region, pdf_path, crop_region)
     
             # Вывод результатов в консоль
             print_region_results(results)
@@ -142,7 +128,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pdf_path = "temp.xlsx"
             await update.message.reply_text("📊 Анализирую Excel файл...")
             # Загружаем Excel файл
-            data = parse_excel_to_structure(pdf_path)
+            data = await asyncio.to_thread(parse_excel_to_structure, pdf_path)
 
         # Выводим результат
             print("Структура данных:")
@@ -179,18 +165,19 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         print("неправильное количество ",i[2])
                 else:
                     print("неправильное list ",i,len(i))
-            # Этап 1: Поиск оборудования на сайтах (web_scraping)
+            # Этап 1: Поиск оборудования на сайтах (асинхронно)
             await update.message.reply_text(f"🌐 Ищу оборудование на {len(SEARCH_SITES)} сайтах...")
-            scraped_data = []
-            for item in equipment_data:
-                results = search_equipment_on_sites(item['name'])
-                scraped_data.append(results)
+            scrape_tasks = [
+                search_equipment_on_sites_async(item['name'])
+                for item in equipment_data
+            ]
+            scraped_data = await asyncio.gather(*scrape_tasks)
             
-            # Этап 2: Генерация отчетов (excel_generator)
+            # Этап 2: Генерация отчетов (асинхронно)
             await update.message.reply_text("📊 Формирую отчеты...")
-            
+
             # Отчет 1: Результаты поиска
-            search_report = create_search_report(equipment_data, scraped_data)
+            search_report = await asyncio.to_thread(create_search_report, equipment_data, scraped_data)
             report_buffer = io.BytesIO()
             search_report.save(report_buffer)  # Сохраняем в буфер
             report_buffer.seek(0)  # Перемещаем указатель в начало
@@ -208,7 +195,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Отчет 2: Коммерческое предложение
             await update.message.reply_text("💼 Формирую коммерческое предложение...")
-            commercial_report = create_commercial_offer(equipment_data, scraped_data,name_data)
+            commercial_report = await asyncio.to_thread(create_commercial_offer, equipment_data, scraped_data, name_data)
             commercial_buffer = io.BytesIO()
             commercial_report.save(commercial_buffer)  # Сохраняем в буфер
             commercial_buffer.seek(0)  # Перемещаем указатель в начало
