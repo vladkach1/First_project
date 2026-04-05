@@ -140,17 +140,21 @@ async def scrape_tinko(item_name):
             return results
 
         for item in items[:3]:
-            name1_elem = item.select_one('p.catalog-product__subtitle.textTailor[itemprop="description"]')
-            name2_elem = item.select_one('.catalog-product__title[itemprop="name"] a')
-            price_elem = item.select_one('[itemprop="price"]')
-            stock_elem = item.select_one('.vue-stock')
+            name_elem = item.select_one('.catalog-product__title a')
+            subtitle_elem = item.select_one('.catalog-product__subtitle')
+            price_elem = item.select_one('.catalog-product__price-block-value')
+            stock_elem = item.select_one('[class*=status]')
 
-            if not name2_elem or not price_elem or not name1_elem:
+            if not name_elem or not price_elem:
                 continue
 
-            name = name1_elem.text.strip() + " " + name2_elem.text.strip()
+            name = name_elem.text.strip()
+            if subtitle_elem:
+                name = subtitle_elem.text.strip() + " " + name
             try:
-                price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
+                price_text = price_elem.text.strip()
+                # Берём только цифры и разделители до первого пробела/символа единицы
+                price = float(re.sub(r'[^\d,]', '', price_text.split('/')[0]).replace(',', '.'))
             except (ValueError, AttributeError):
                 price = 0
             stock = stock_elem.text.strip() if stock_elem else ""
@@ -162,7 +166,7 @@ async def scrape_tinko(item_name):
             elif bool(re.match(r'^до \d+ дней', stock.lower())):
                 status = stock.lower()
             else:
-                status = "Ошибка"
+                status = 'Под заказ'
 
             results.append({
                 'site': 'Tinko',
@@ -216,29 +220,20 @@ async def scrape_luis(item_name):
             return results
 
         for item in items[:3]:
-            name_elem = item.select_one('a.T9HTPK.CIG0OA')
-            price_elem = item.select_one('.QG9RHe > span')
-            stock_elem = item.select_one('.QG9RHe > span')
+            name_elem = item.select_one('.app-product-card-title, [class*=tile-product__name]')
+            price_elem = item.select_one('.app-price__value')
 
             if not name_elem or not price_elem:
                 continue
 
             name = name_elem.text.strip()
             try:
-                if price_elem.text.strip() != "Цена":
-                    price = float(price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))
-                else:
-                    price = 0
+                digits = re.sub(r'[^\d]', '', price_elem.text.split('₽')[0])
+                price = float(digits) if digits else 0
             except (ValueError, AttributeError):
                 price = 0
-            stock = stock_elem.text.strip() if stock_elem else ""
 
-            if "цена" in stock.lower():
-                status = 'Под заказ'
-            elif bool(re.match(r'^[0-9]+[\.|\,]?[0-9]*$', price_elem.text.replace(' ', '').replace('₽', '').replace(',', '.'))):
-                status = "В наличии"
-            else:
-                status = "Ошибка"
+            status = 'В наличии' if price > 0 else 'Под заказ'
 
             results.append({
                 'site': 'luis',
@@ -307,16 +302,8 @@ async def scrape_layta(item_name):
             name = name_elem.text.strip()
 
             if price_elem.text.strip() != "Уточняйте у менеджера":
-                numbers = re.findall(r'[\d\s,]+', price_elem.text.strip())
-                prices = []
-                for num in numbers:
-                    clean_num = num.strip().replace(' ', '').replace(',', '.')
-                    if clean_num:
-                        try:
-                            prices.append(float(clean_num))
-                        except ValueError:
-                            continue
-                price = max(prices) if prices else 0.0
+                digits = re.sub(r'[^\d]', '', price_elem.text.split('₽')[0])
+                price = float(digits) if digits else 0.0
                 status = 'В наличии'
             else:
                 price = 0
@@ -366,7 +353,7 @@ async def scrape_etm(item_name):
         html, final_url = await _get_page_html(url, '.tss-o60ib4-grid_item')
 
         soup = BeautifulSoup(html, 'html.parser')
-        items = soup.select('.tss-o60ib4-grid_item')
+        items = soup.select('[data-testid*=catalog-list-item]')
         results = []
 
         if len(items) == 0:
@@ -381,41 +368,41 @@ async def scrape_etm(item_name):
             return results
 
         for item in items[:3]:
-            name1_elem = item.select_one('a[data-testid="link-good-name"]')
-            name2_elem = item.select_one('.tss-9cdrin-good_descr_value')
-            price_elem = item.select_one('p.MuiTypography-title4.mui-1rtbk0o')
-            stock_elem = item.select_one('button[data-testid^="availability_link-"]')
+            # Имя — ссылка на товар или длинный текст без лишних меток
+            name_elem = item.select_one('a[data-testid="link-good-name"]')
+            if not name_elem:
+                typography = item.select('[class*=MuiTypography]')
+                name_elem = next(
+                    (t for t in typography
+                     if len(t.text.strip()) > 15
+                     and t.name in ('p', 'span', 'a')
+                     and 'Сделано' not in t.text
+                     and 'ЕАЭС' not in t.text),
+                    None
+                )
+            price_elem = item.select_one('[class*=price]') or item.select_one('[class*=Price]')
+            stock_elem = item.select_one('[data-testid*=availability]')
 
-            if not name2_elem or not price_elem or not name1_elem:
+            if not name_elem or not price_elem:
                 continue
 
-            name = name1_elem.text.strip() + " " + name2_elem.text.strip()
+            name = name_elem.text.strip()
 
             try:
                 price_text = price_elem.text.strip()
-                if price_text not in ("По запросу", "Свяжитесь с нами", "н/д"):
-                    price = float(
-                        price_text
-                        .replace(' ', '')
-                        .replace('₽/шт', '')
-                        .replace(',', '.')
-                        .replace('₽/компл', '')
-                        .replace('₽/м', '')
-                        .replace('₽/упак', '')
-                        .replace('₽/уп', '')
-                        .replace('₽/рул', '')
-                    )
-                else:
-                    price = 0
+                price = float(
+                    re.sub(r'[^\d,.]', '', price_text.split('₽')[0])
+                    .replace(',', '.')
+                )
             except (ValueError, AttributeError):
                 price = 0
 
             stock = stock_elem.text.strip() if stock_elem else ""
 
-            if "по запросу" in stock.lower():
+            if "по запросу" in stock.lower() or not stock:
                 status = 'Под заказ'
             else:
-                status = stock
+                status = 'В наличии'
 
             results.append({
                 'site': 'etm',
@@ -447,7 +434,7 @@ async def scrape_etm(item_name):
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
-    #"https://www.layta.ru": scrape_layta,
+    "https://www.layta.ru": scrape_layta,
     "https://www.etm.ru": scrape_etm
 }
 

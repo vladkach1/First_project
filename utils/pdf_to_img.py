@@ -7,26 +7,40 @@ import io
 import logging
 import pandas as pd
 import numpy as np
-from rapidocr_onnxruntime import RapidOCR
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Настройка логирования
 logger = logging.getLogger("PdfToImg")
 
-# Глобальный экземпляр OCR
-_ocr_engine = RapidOCR()
+# Инициализация OpenRouter
+_openrouter = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ["OPENROUTER_API_KEY"],
+)
+_OR_MODEL = "google/gemma-3-12b-it:free"
+
+_OCR_PROMPT = (
+    "Извлеки весь текст с изображения построчно. "
+    "Сохраняй оригинальное написание: кириллицу пиши кириллицей, "
+    "латиницу — латиницей (артикулы, марки, аббревиатуры). "
+    "Не добавляй пояснений, только текст."
+)
 
 
 def crop_page_to_region(pdf_path, page_num, crop_region):
     """Обрезает страницу PDF до указанной области и возвращает изображение"""
     try:
         doc = fitz.open(pdf_path)
+        if doc.is_repaired:
+            logger.warning(f"PDF восстановлен из повреждённого состояния: {pdf_path}")
         page = doc[page_num]
 
-        # Обрезаем страницу
         rect = fitz.Rect(crop_region)
         pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect)
 
-        # Конвертируем в изображение
         img_data = pix.tobytes("png")
         image = Image.open(io.BytesIO(img_data))
 
@@ -39,16 +53,26 @@ def crop_page_to_region(pdf_path, page_num, crop_region):
 
 
 def _ocr_image(image):
-    """Извлекает текст из PIL Image через RapidOCR"""
-    img_array = np.array(image)
-    result, elapse = _ocr_engine(img_array)
+    """Извлекает текст из PIL Image через OpenRouter Vision"""
+    try:
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        b64 = __import__("base64").b64encode(buf.getvalue()).decode()
 
-    if not result:
+        response = _openrouter.chat.completions.create(
+            model=_OR_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _OCR_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                ],
+            }],
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Ошибка OpenRouter OCR: {e}")
         return ""
-
-    # result — список [bbox, text, confidence], собираем текст
-    lines = [item[1] for item in result]
-    return "\n".join(lines)
 
 
 def extract_text_from_region(pdf_path, page_num, crop_region):
@@ -112,6 +136,8 @@ def analyze_pdf_region(pdf_path, crop_region):
 
     # Получаем количество страниц через fitz (PyMuPDF)
     doc = fitz.open(pdf_path)
+    if doc.is_repaired:
+        logger.warning(f"PDF восстановлен из повреждённого состояния: {pdf_path}")
     total_pages = len(doc)
     doc.close()
 
@@ -204,7 +230,7 @@ def parse_excel_to_structure(file_path):
             # Преобразуем все в строки
             if not (any(pd.isna(row.iloc[i]) for i in [1, 3, 4])):
                 name = str(row.iloc[1]).strip()
-                model = str(row.iloc[2]).strip()
+                model = str(row.iloc[2]).strip() if not pd.isna(row.iloc[2]) else ''
                 unit = str(row.iloc[3]).strip()
                 quantity = row.iloc[4]
                 if (unit not in ['', ' '] and
@@ -213,7 +239,20 @@ def parse_excel_to_structure(file_path):
 
                     try:
                         quantity_num = float(quantity)
-                        result.append([str(str(name) + " " + str(model)), str(unit), str(quantity_num)])
+                        # Объединяем название и модель, убираем nan
+                        combined = (name + " " + model).strip() if model and model.lower() != 'nan' else name
+                        # Убираем задублированные части (когда название повторяется дважды в ячейке)
+                        # Ищем повторяющийся префикс: "A B C A B C X" -> "A B C X"
+                        words = combined.split()
+                        n = len(words)
+                        deduped = False
+                        for split in range(2, n // 2 + 1):
+                            prefix = words[:split]
+                            if words[split:split + split] == prefix:
+                                combined = ' '.join(prefix + words[split * 2:])
+                                deduped = True
+                                break
+                        result.append([combined, str(unit), str(quantity_num)])
                     except (ValueError, TypeError):
                         continue
             else:
