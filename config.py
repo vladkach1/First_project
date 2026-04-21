@@ -20,7 +20,7 @@ REQUEST_TIMEOUT = 30
 
 # Настройки скрапинга
 MAX_CONCURRENT_PAGES = 10          # макс. параллельных вкладок в браузере
-SCRAPE_SELECTOR_TIMEOUT = 8        # сек. ожидания селектора результатов (быстрый fallback)
+SCRAPE_SELECTOR_TIMEOUT = 180        # сек. ожидания селектора результатов (быстрый fallback)
 PROGRESS_BATCH_SIZE = 20           # размер батча для прогресс-сообщений
 
 # Настройки кэша

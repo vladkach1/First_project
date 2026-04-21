@@ -55,7 +55,7 @@ async def _ensure_browser():
         _context = await _browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/120.0.0.0 Safari/537.36"
+                       "Chrome/92.0.4515.131 YaBrowser/21.8.1.468 Yowser/2.5 Safari/537.36"
         )
         logger.info("Браузер запущен")
 
@@ -202,10 +202,10 @@ async def scrape_luis(item_name):
             return cached_data
 
         url = f"https://luis.ru/catalog/search?searchString={item_name}"
-        html, final_url = await _get_page_html(url, 'div[style*="transition-delay"]')
+        html, final_url = await _get_page_html(url, '.catalog-page-products-list__item')
 
         soup = BeautifulSoup(html, 'html.parser')
-        items = soup.select('div[style*="transition-delay"]')
+        items = soup.select('.catalog-page-products-list__item')
         results = []
 
         if len(items) == 0:
@@ -213,7 +213,7 @@ async def scrape_luis(item_name):
                 'site': 'luis',
                 'name': item_name,
                 'price': 0,
-                'status': "Не найдено",
+                'status': "Не найденой",
                 'url': final_url
             })
             cache.set(cache_key, results)
@@ -222,16 +222,21 @@ async def scrape_luis(item_name):
         for item in items[:3]:
             name_elem = item.select_one('.app-product-card-title, [class*=tile-product__name]')
             price_elem = item.select_one('.app-price__value')
+            if price_elem.text.strip()=="Цена по запросу":
+                price = 0
+            else:
+                digits = re.sub(r'[^\d]', '', price_elem.text.split('₽')[0])
+                price = float(digits)
 
             if not name_elem or not price_elem:
                 continue
 
             name = name_elem.text.strip()
-            try:
-                digits = re.sub(r'[^\d]', '', price_elem.text.split('₽')[0])
-                price = float(digits) if digits else 0
-            except (ValueError, AttributeError):
-                price = 0
+            #try:
+            #    digits = re.sub(r'[^\d]', '', price_elem.text.split('₽')[0])
+            #    price = float(digits) if digits else 0
+            #except (ValueError, AttributeError):
+            #    price = 0
 
             status = 'В наличии' if price > 0 else 'Под заказ'
 
@@ -248,7 +253,7 @@ async def scrape_luis(item_name):
                 'site': 'luis',
                 'name': item_name,
                 'price': 0,
-                'status': "Не найдено",
+                'status': "Не найденоц",
                 'url': final_url
             })
         cache.set(cache_key, results)
@@ -434,8 +439,8 @@ async def scrape_etm(item_name):
 SITE_SCRAPERS = {
     "https://www.tinko.ru": scrape_tinko,
     "https://www.luis.ru": scrape_luis,
-    "https://www.layta.ru": scrape_layta,
-    "https://www.etm.ru": scrape_etm
+    #"https://www.layta.ru": scrape_layta,
+    #"https://www.etm.ru": scrape_etm
 }
 
 
