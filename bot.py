@@ -64,29 +64,63 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await query.answer()
 
     if query.data == 'instruction':
+        # Сначала отправляем текстовое сообщение
+        await query.edit_message_text(
+            "📖 Вот примеры файлов, которые можно подать на вход:"
+        )
+        
+        # Пути к файлам-примерам (нужно создать эти файлы в папке examples/)
+        example_pdf_path = "examples/example_specification.pdf"
+        example_excel_path = "examples/example_specification.xlsx"
+        
+        # Проверяем существование файлов и отправляем их
+        if os.path.exists(example_pdf_path):
+            with open(example_pdf_path, 'rb') as pdf_file:
+                await query.message.reply_document(
+                    document=InputFile(pdf_file, filename='example_specification.pdf'),
+                    caption="📄 Пример PDF файла со спецификацией"
+                )
+        else:
+            # Если файл не найден, отправляем сообщение-заглушку
+            await query.message.reply_text(
+                "⚠️ Файл примера PDF не найден. Пожалуйста, создайте файл example_specification.pdf в папке examples/"
+            )
+        
+        if os.path.exists(example_excel_path):
+            with open(example_excel_path, 'rb') as excel_file:
+                await query.message.reply_document(
+                    document=InputFile(excel_file, filename='example_specification.xlsx'),
+                    caption="📊 Пример Excel файла со спецификацией"
+                )
+        else:
+            # Если файл не найден, отправляем сообщение-заглушку
+            await query.message.reply_text(
+                "⚠️ Файл примера Excel не найден. Пожалуйста, создайте файл example_specification.xlsx в папке examples/"
+            )
+        
+        # Отправляем полную инструкцию отдельным сообщением
         instruction_text = (
-            "📖 ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ БОТА\n\n"
-            "1. 📄 ПОДГОТОВЬТЕ ФАЙЛ\n"
+            "📖 **ПОЛНАЯ ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ БОТА**\n\n"
+            "**1. 📄 ПОДГОТОВЬТЕ ФАЙЛ**\n"
             "   • Формат: PDF или Excel (.xlsx)\n"
             "   • Данные должны быть в формате: 'Наименование Количество Единица'\n"
             "   • Пример: 'Кабель 305 м', 'Видеокамера 2 шт'\n\n"
-            "2. 📤 ОТПРАВЬТЕ ФАЙЛ БОТУ\n"
+            "**2. 📤 ОТПРАВЬТЕ ФАЙЛ БОТУ**\n"
             "   • Просто перетащите файл в чат или используйте скрепку\n"
             "   • Максимальный размер: 20MB\n\n"
-            "3. ⏳ ДОЖДИТЕСЬ ОБРАБОТКИ\n"
+            "**3. ⏳ ДОЖДИТЕСЬ ОБРАБОТКИ**\n"
             "   • Бот проанализирует файл (1-2 минуты)\n"
             "   • Выполнит поиск на сайтах поставщиков\n"
             "   • Сгенерирует отчеты\n\n"
-            "4. 📥 ПОЛУЧИТЕ РЕЗУЛЬТАТЫ\n"
+            "**4. 📥 ПОЛУЧИТЕ РЕЗУЛЬТАТЫ**\n"
             "   • Search Report.xlsx - детальные результаты поиска\n"
             "   • Commercial Offer.xlsx - готовое коммерческое предложение\n\n"
-            "❓ ЕСЛИ ВОЗНИКЛИ ПРОБЛЕМЫ:\n"
+            "**❓ ЕСЛИ ВОЗНИКЛИ ПРОБЛЕМЫ:**\n"
             "   • Проверьте формат данных в файле\n"
             "   • Убедитесь, что файл не поврежден\n"
             "   • Обратитесь к администраторам: @vlad_pash или @shishqo"
         )
-        await query.edit_message_text(instruction_text)
-
+        await query.message.reply_text(instruction_text, parse_mode='Markdown')
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик документов (PDF / XLSX)"""
