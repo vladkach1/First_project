@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Bash(pip install:*)",
+      "Bash(tesseract --version)",
+      "Bash(tesseract --list-langs)",
+      "Bash(python:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(pip show:*)",
+      "Bash(venv\\\\Scripts\\\\pip install:*)",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(venv/Scripts/pip uninstall:*)",
+      "Bash(venv/Scripts/python -c ':*)",
+      "Bash(rm -f \"C:\\\\Users\\\\tatar3n\\\\Documents\\\\GitHub\\\\First_project\\\\cache/\"*.json)",
+      "Bash(grep -l \"Коробка\\\\|коробка\\\\|KMOM\" cache/*.json)"
+    ]
+  }
+}

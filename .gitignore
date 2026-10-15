@@ -1,0 +1,22 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Temporary processing output
+extracted_region_text.txt
+*.tmp
